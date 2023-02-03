@@ -1,0 +1,645 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta http-equiv=x-ua-compatible content="IE=edge,chrome=1"><title>Librbd学习2: 写I/O流程 | Hawk's Blog</title><meta name=viewport content="width=device-width,minimum-scale=1"><meta name=description content="写I/O处理流程图 先把自己根据I/O栈总结的流程图放上来，后续的分析以该图为基准，顺着这个图来查看具体流程能够加深理解:)
+图中不同的阶段有不同的颜色，其中：
+黄色部分，代表客户端程序主线程把写操作追加到工作队列的步骤 蓝色部分，为Image内置线程池中的worker线程从工作队列中取出一次(写)请求的步骤 绿色部分，为该写请求的处理在librbd层上的步骤 橙色部分，为该写请求的处理在librados层上的步骤 粉色部分，为osdc层中的处理步骤 灰色部分，为msg层中的处理，此次I/O流程图未展开 客户端侧写入流程 主要工作内容 Image.write实际上就是把相关请求的参数，丢入到image成员变量ctx维护的一个ImageRequestWQ类型的队列中。 ImageRequestWQ处理的主要工作： 对I/O进行了参数检查和裁剪 使用异步I/O接口(aio_write)实现了同步I/O(write)的功能 异步I/O(aio_write)中，把write请求打包为ImageDispatchSpec*类型的req，并调用PointerWQ.queue进行入列 PointerWQ的queue方法负责把item(req)追加到std::list类型的成员变量m_items的尾部，主要流程到此结束 调用librbd::Image中write方法 Image::write() ImageCtx *ictx = (ImageCtx *)ctx; // 调用imageContext的io_work_queue的write, io_work_queue是一个ImageRequestWQ类型。 return ictx->io_work_queue->write(ofs, len, bufferlist{bl}, 0); -> ImageRequestWQ<I>::write(); ImageRequestWQ中的流程 实际调用了ImageRequestWQ的aio_write方法，通过等待回调的方式实现同步效果
+ImageRequestWQ<I>::write() m_queued_writes++; ThreadPool::PointerWQ<ImageDispatchSpec<I> >::queue(req); // 调用ThreadPool::PointerWQ的queue方法ImageRequestWQ<I>::write int r = clip_io(util::get_image_ctx(&m_image_ctx), off, &len); // 进行参数检查，并且当len越界时，裁剪len至size的最大有效值 C_SaferCond cond; AioCompletion *c = AioCompletion::create(&cond); // 构建异步IO完成时的回调 aio_write(c, off, len, std::move(bl), op_flags, false); -> ImageRequestWQ<I>::aio_write() // 调用aio_write异步写接口 r = cond."><meta name=generator content="Hugo 0.110.0"><meta name=robots content="noindex, nofollow"><link rel=stylesheet href=/ananke/css/main.min.css><meta property="og:title" content="Librbd学习2: 写I/O流程"><meta property="og:description" content="写I/O处理流程图 先把自己根据I/O栈总结的流程图放上来，后续的分析以该图为基准，顺着这个图来查看具体流程能够加深理解:)
+图中不同的阶段有不同的颜色，其中：
+黄色部分，代表客户端程序主线程把写操作追加到工作队列的步骤 蓝色部分，为Image内置线程池中的worker线程从工作队列中取出一次(写)请求的步骤 绿色部分，为该写请求的处理在librbd层上的步骤 橙色部分，为该写请求的处理在librados层上的步骤 粉色部分，为osdc层中的处理步骤 灰色部分，为msg层中的处理，此次I/O流程图未展开 客户端侧写入流程 主要工作内容 Image.write实际上就是把相关请求的参数，丢入到image成员变量ctx维护的一个ImageRequestWQ类型的队列中。 ImageRequestWQ处理的主要工作： 对I/O进行了参数检查和裁剪 使用异步I/O接口(aio_write)实现了同步I/O(write)的功能 异步I/O(aio_write)中，把write请求打包为ImageDispatchSpec*类型的req，并调用PointerWQ.queue进行入列 PointerWQ的queue方法负责把item(req)追加到std::list类型的成员变量m_items的尾部，主要流程到此结束 调用librbd::Image中write方法 Image::write() ImageCtx *ictx = (ImageCtx *)ctx; // 调用imageContext的io_work_queue的write, io_work_queue是一个ImageRequestWQ类型。 return ictx->io_work_queue->write(ofs, len, bufferlist{bl}, 0); -> ImageRequestWQ<I>::write(); ImageRequestWQ中的流程 实际调用了ImageRequestWQ的aio_write方法，通过等待回调的方式实现同步效果
+ImageRequestWQ<I>::write() m_queued_writes++; ThreadPool::PointerWQ<ImageDispatchSpec<I> >::queue(req); // 调用ThreadPool::PointerWQ的queue方法ImageRequestWQ<I>::write int r = clip_io(util::get_image_ctx(&m_image_ctx), off, &len); // 进行参数检查，并且当len越界时，裁剪len至size的最大有效值 C_SaferCond cond; AioCompletion *c = AioCompletion::create(&cond); // 构建异步IO完成时的回调 aio_write(c, off, len, std::move(bl), op_flags, false); -> ImageRequestWQ<I>::aio_write() // 调用aio_write异步写接口 r = cond."><meta property="og:type" content="article"><meta property="og:url" content="https://hawkhe.github.io/post/librbd_io_stack/"><meta property="article:section" content="post"><meta property="article:published_time" content="2022-07-28T08:22:07+00:00"><meta property="article:modified_time" content="2022-07-28T08:22:07+00:00"><meta itemprop=name content="Librbd学习2: 写I/O流程"><meta itemprop=description content="写I/O处理流程图 先把自己根据I/O栈总结的流程图放上来，后续的分析以该图为基准，顺着这个图来查看具体流程能够加深理解:)
+图中不同的阶段有不同的颜色，其中：
+黄色部分，代表客户端程序主线程把写操作追加到工作队列的步骤 蓝色部分，为Image内置线程池中的worker线程从工作队列中取出一次(写)请求的步骤 绿色部分，为该写请求的处理在librbd层上的步骤 橙色部分，为该写请求的处理在librados层上的步骤 粉色部分，为osdc层中的处理步骤 灰色部分，为msg层中的处理，此次I/O流程图未展开 客户端侧写入流程 主要工作内容 Image.write实际上就是把相关请求的参数，丢入到image成员变量ctx维护的一个ImageRequestWQ类型的队列中。 ImageRequestWQ处理的主要工作： 对I/O进行了参数检查和裁剪 使用异步I/O接口(aio_write)实现了同步I/O(write)的功能 异步I/O(aio_write)中，把write请求打包为ImageDispatchSpec*类型的req，并调用PointerWQ.queue进行入列 PointerWQ的queue方法负责把item(req)追加到std::list类型的成员变量m_items的尾部，主要流程到此结束 调用librbd::Image中write方法 Image::write() ImageCtx *ictx = (ImageCtx *)ctx; // 调用imageContext的io_work_queue的write, io_work_queue是一个ImageRequestWQ类型。 return ictx->io_work_queue->write(ofs, len, bufferlist{bl}, 0); -> ImageRequestWQ<I>::write(); ImageRequestWQ中的流程 实际调用了ImageRequestWQ的aio_write方法，通过等待回调的方式实现同步效果
+ImageRequestWQ<I>::write() m_queued_writes++; ThreadPool::PointerWQ<ImageDispatchSpec<I> >::queue(req); // 调用ThreadPool::PointerWQ的queue方法ImageRequestWQ<I>::write int r = clip_io(util::get_image_ctx(&m_image_ctx), off, &len); // 进行参数检查，并且当len越界时，裁剪len至size的最大有效值 C_SaferCond cond; AioCompletion *c = AioCompletion::create(&cond); // 构建异步IO完成时的回调 aio_write(c, off, len, std::move(bl), op_flags, false); -> ImageRequestWQ<I>::aio_write() // 调用aio_write异步写接口 r = cond."><meta itemprop=datePublished content="2022-07-28T08:22:07+00:00"><meta itemprop=dateModified content="2022-07-28T08:22:07+00:00"><meta itemprop=wordCount content="1982"><meta itemprop=keywords content="librbd,"><meta name=twitter:card content="summary"><meta name=twitter:title content="Librbd学习2: 写I/O流程"><meta name=twitter:description content="写I/O处理流程图 先把自己根据I/O栈总结的流程图放上来，后续的分析以该图为基准，顺着这个图来查看具体流程能够加深理解:)
+图中不同的阶段有不同的颜色，其中：
+黄色部分，代表客户端程序主线程把写操作追加到工作队列的步骤 蓝色部分，为Image内置线程池中的worker线程从工作队列中取出一次(写)请求的步骤 绿色部分，为该写请求的处理在librbd层上的步骤 橙色部分，为该写请求的处理在librados层上的步骤 粉色部分，为osdc层中的处理步骤 灰色部分，为msg层中的处理，此次I/O流程图未展开 客户端侧写入流程 主要工作内容 Image.write实际上就是把相关请求的参数，丢入到image成员变量ctx维护的一个ImageRequestWQ类型的队列中。 ImageRequestWQ处理的主要工作： 对I/O进行了参数检查和裁剪 使用异步I/O接口(aio_write)实现了同步I/O(write)的功能 异步I/O(aio_write)中，把write请求打包为ImageDispatchSpec*类型的req，并调用PointerWQ.queue进行入列 PointerWQ的queue方法负责把item(req)追加到std::list类型的成员变量m_items的尾部，主要流程到此结束 调用librbd::Image中write方法 Image::write() ImageCtx *ictx = (ImageCtx *)ctx; // 调用imageContext的io_work_queue的write, io_work_queue是一个ImageRequestWQ类型。 return ictx->io_work_queue->write(ofs, len, bufferlist{bl}, 0); -> ImageRequestWQ<I>::write(); ImageRequestWQ中的流程 实际调用了ImageRequestWQ的aio_write方法，通过等待回调的方式实现同步效果
+ImageRequestWQ<I>::write() m_queued_writes++; ThreadPool::PointerWQ<ImageDispatchSpec<I> >::queue(req); // 调用ThreadPool::PointerWQ的queue方法ImageRequestWQ<I>::write int r = clip_io(util::get_image_ctx(&m_image_ctx), off, &len); // 进行参数检查，并且当len越界时，裁剪len至size的最大有效值 C_SaferCond cond; AioCompletion *c = AioCompletion::create(&cond); // 构建异步IO完成时的回调 aio_write(c, off, len, std::move(bl), op_flags, false); -> ImageRequestWQ<I>::aio_write() // 调用aio_write异步写接口 r = cond."></head><body class="ma0 avenir bg-near-white"><header><div class=bg-black><nav class="pv3 ph3 ph4-ns" role=navigation><div class="flex-l justify-between items-center center"><a href=/ class="f3 fw2 hover-white no-underline white-90 dib">Hawk's Blog</a><div class="flex-l items-center"><ul class="pl0 mr3"><li class="list f5 f4-ns fw4 dib pr3"><a class="hover-white no-underline white-90" href=/post/ title="Articles page">Articles</a></li></ul><div class=ananke-socials></div></div></div></nav></div></header><main class=pb7 role=main><article class="flex-l flex-wrap justify-between mw8 center ph3"><header class="mt4 w-100"><aside class="instapaper_ignoref b helvetica tracked">ARTICLES</aside><div id=sharing class="mt3 ananke-socials"></div><h1 class="f1 athelas mt3 mb1">Librbd学习2: 写I/O流程</h1><time class="f6 mv4 dib tracked" datetime=2022-07-28T08:22:07Z>July 28, 2022</time></header><div class="nested-copy-line-height lh-copy serif f4 nested-links mid-gray pr4-l w-two-thirds-l"><h2 id=写io处理流程图>写I/O处理流程图</h2><p>先把自己根据I/O栈总结的流程图放上来，后续的分析以该图为基准，顺着这个图来查看具体流程能够加深理解:)</p><p><img src=D:%5Cwork%5C%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0%5Cceph%E5%AD%A6%E4%B9%A0%5Clibrbd%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86%5Cwrite%5Csrc%5Cwrite_IO_flow.png alt></p><p>图中不同的阶段有不同的颜色，其中：</p><ul><li>黄色部分，代表客户端程序主线程把写操作追加到工作队列的步骤</li><li>蓝色部分，为Image内置线程池中的worker线程从工作队列中取出一次(写)请求的步骤</li><li>绿色部分，为该写请求的处理在librbd层上的步骤</li><li>橙色部分，为该写请求的处理在librados层上的步骤</li><li>粉色部分，为osdc层中的处理步骤</li><li>灰色部分，为msg层中的处理，此次I/O流程图未展开</li></ul><h2 id=客户端侧写入流程>客户端侧写入流程</h2><h3 id=主要工作内容>主要工作内容</h3><ul><li>Image.write实际上就是把相关请求的参数，丢入到image成员变量ctx维护的一个ImageRequestWQ类型的队列中。</li><li>ImageRequestWQ处理的主要工作：<ul><li>对I/O进行了参数检查和裁剪</li><li>使用异步I/O接口(aio_write)实现了同步I/O(write)的功能</li><li>异步I/O(aio_write)中，把write请求打包为ImageDispatchSpec*类型的req，并调用PointerWQ.queue进行入列</li></ul></li><li>PointerWQ的queue方法负责把item(req)追加到std::list类型的成员变量m_items的尾部，主要流程到此结束</li></ul><h3 id=调用librbdimage中write方法>调用librbd::Image中write方法</h3><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span>Image<span style=color:#f92672>::</span>write()
+</span></span><span style=display:flex><span>  ImageCtx <span style=color:#f92672>*</span>ictx <span style=color:#f92672>=</span> (ImageCtx <span style=color:#f92672>*</span>)ctx;
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// 调用imageContext的io_work_queue的write, io_work_queue是一个ImageRequestWQ类型。
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>return</span> ictx<span style=color:#f92672>-&gt;</span>io_work_queue<span style=color:#f92672>-&gt;</span>write(ofs, len, bufferlist{bl}, <span style=color:#ae81ff>0</span>); <span style=color:#f92672>-&gt;</span> ImageRequestWQ<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>write(); 
+</span></span></code></pre></div><h3 id=imagerequestwq中的流程>ImageRequestWQ中的流程</h3><p>实际调用了ImageRequestWQ的aio_write方法，通过等待回调的方式实现同步效果</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span>ImageRequestWQ<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>write()
+</span></span><span style=display:flex><span>  m_queued_writes<span style=color:#f92672>++</span>;
+</span></span><span style=display:flex><span>  ThreadPool<span style=color:#f92672>::</span>PointerWQ<span style=color:#f92672>&lt;</span>ImageDispatchSpec<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;</span> <span style=color:#f92672>&gt;::</span>queue(req); <span style=color:#75715e>// 调用ThreadPool::PointerWQ的queue方法ImageRequestWQ&lt;I&gt;::write
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>int</span> r <span style=color:#f92672>=</span> clip_io(util<span style=color:#f92672>::</span>get_image_ctx(<span style=color:#f92672>&amp;</span>m_image_ctx), off, <span style=color:#f92672>&amp;</span>len); <span style=color:#75715e>// 进行参数检查，并且当len越界时，裁剪len至size的最大有效值
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  C_SaferCond cond;
+</span></span><span style=display:flex><span>  AioCompletion <span style=color:#f92672>*</span>c <span style=color:#f92672>=</span> AioCompletion<span style=color:#f92672>::</span>create(<span style=color:#f92672>&amp;</span>cond); <span style=color:#75715e>// 构建异步IO完成时的回调
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  aio_write(c, off, len, std<span style=color:#f92672>::</span>move(bl), op_flags, false); <span style=color:#f92672>-&gt;</span> ImageRequestWQ<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>aio_write() <span style=color:#75715e>// 调用aio_write异步写接口
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  r <span style=color:#f92672>=</span> cond.wait(); <span style=color:#75715e>// 等待I/O完成，实现同步I/O效果
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>ImageRequestWQ<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>aio_write()
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// 创建一个write请求
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  ImageDispatchSpec<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;</span> <span style=color:#f92672>*</span>req <span style=color:#f92672>=</span> ImageDispatchSpec<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>create_write_request(
+</span></span><span style=display:flex><span>          m_image_ctx, c, {{off, len}}, std<span style=color:#f92672>::</span>move(bl), op_flags, trace, tid);
+</span></span><span style=display:flex><span>  queue(req); <span style=color:#f92672>-&gt;</span> ImageRequestWQ<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>queue() <span style=color:#75715e>// 把write请求丢入queue中
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>ImageRequestWQ<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>queue()
+</span></span><span style=display:flex><span>  m_queued_writes<span style=color:#f92672>++</span>;
+</span></span><span style=display:flex><span>  ThreadPool<span style=color:#f92672>::</span>PointerWQ<span style=color:#f92672>&lt;</span>ImageDispatchSpec<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;</span> <span style=color:#f92672>&gt;::</span>queue(req); <span style=color:#75715e>// 显式调用ImageRequestWQ的基类ThreadPool::PointerWQ的queue方法
+</span></span></span></code></pre></div><h3 id=调用pointerwq的queue方法>调用PointerWQ的queue方法</h3><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span>ThreadPool<span style=color:#f92672>::</span>PointerWQ<span style=color:#f92672>&lt;</span>ImageDispatchSpec<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;</span> <span style=color:#f92672>&gt;::</span>queue()
+</span></span><span style=display:flex><span>  std<span style=color:#f92672>::</span>lock_guard l(m_pool<span style=color:#f92672>-&gt;</span>_lock); <span style=color:#75715e>// 对整个ThreadPool添加一个排他锁
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  m_items.push_back(item); <span style=color:#75715e>// std::list类型的m_items后部追加一个item，即流程图中index为1的元素
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  m_pool<span style=color:#f92672>-&gt;</span>_cond.notify_one();
+</span></span></code></pre></div><p>使用GDB查看m_items列表在添加item前后状态</p><pre tabindex=0><code>(gdb) n
+378           m_items.push_back(item);
+(gdb) p m_items.size()
+$10 = 1
+(gdb) n
+379           m_pool-&gt;_cond.notify_one();
+(gdb) p m_items.size()
+$11 = 2
+(gdb) p m_items.back()
+$12 = (Context *) 0x7fffb400ee50
+</code></pre><p>在执行push_back之后，m_items的长度增加1，新增了一个Context*指针类型的元素。至此，客户端主线程的核心工作已经完成。</p><h2 id=工作线程处理请求>工作线程处理请求</h2><p>线程池中的worker线程从队列中拉取请求并执行</p><h3 id=主要工作内容-1>主要工作内容</h3><ul><li>ThreadPool::worker实现了线程池中每一个工作线程的业务流程，并在两个循环中展开</li><li>外层循环确保该线程一直在工作，直到被标记为_stop</li><li>内存循环通过一个公共的index，每次遍历work_queues得到其中某个work_queue，并出列一个item(ImageDispatchSpec*类型)</li><li>如果该item不为空，则使用work_queue的_void_process方法处理该item</li></ul><h3 id=threadpool的定义>ThreadPool的定义</h3><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>ThreadPool</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> md_config_obs_t
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>protected</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    CephContext <span style=color:#f92672>*</span>cct;
+</span></span><span style=display:flex><span>    std<span style=color:#f92672>::</span>string name;
+</span></span><span style=display:flex><span>    std<span style=color:#f92672>::</span>string thread_name;
+</span></span><span style=display:flex><span>    std<span style=color:#f92672>::</span>string lockname;
+</span></span><span style=display:flex><span>    ceph<span style=color:#f92672>::</span>mutex _lock;
+</span></span><span style=display:flex><span>    ceph<span style=color:#f92672>::</span>condition_variable _cond;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>bool</span> _stop; <span style=color:#75715e>// 控制是否停止的状态值
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>int</span> _pause; <span style=color:#75715e>// 控制是否暂停
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>int</span> _draining;
+</span></span><span style=display:flex><span>    ceph<span style=color:#f92672>::</span>condition_variable _wait_cond;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>protected</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 维护的多个WorkQueue或者其子类，比如WorkQueueVal, BatchWorkQueue, PointerWQ, ImageRequestWQ等
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    std<span style=color:#f92672>::</span>vector<span style=color:#f92672>&lt;</span>WorkQueue_ <span style=color:#f92672>*&gt;</span> work_queues;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> next_work_queue <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><h3 id=执行worker方法>执行worker方法</h3><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>void</span> ThreadPool<span style=color:#f92672>::</span>worker(WorkThread <span style=color:#f92672>*</span>wt)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#f92672>!</span>_stop) <span style=color:#75715e>// 循环执行，除非_stop被置为false
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    {
+</span></span><span style=display:flex><span>        ...
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>_pause <span style=color:#f92672>&amp;&amp;</span> <span style=color:#f92672>!</span>work_queues.empty()) <span style=color:#75715e>// 当_pause为0时，且work_queues不为空时执行
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>int</span> tries <span style=color:#f92672>=</span> <span style=color:#ae81ff>2</span> <span style=color:#f92672>*</span> work_queues.size(); <span style=color:#75715e>// 最大重试次数
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>            <span style=color:#66d9ef>while</span> (tries<span style=color:#f92672>--</span>) <span style=color:#75715e>// 在最大重试次数内，循环执行
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>            {
+</span></span><span style=display:flex><span>                ...
+</span></span><span style=display:flex><span>                next_work_queue <span style=color:#f92672>%=</span> work_queues.size();
+</span></span><span style=display:flex><span>                wq <span style=color:#f92672>=</span> work_queues[next_work_queue<span style=color:#f92672>++</span>]; <span style=color:#75715e>// 获取下一个work_queue
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>item <span style=color:#f92672>=</span> wq<span style=color:#f92672>-&gt;</span>_void_dequeue(); <span style=color:#75715e>// 出列work_queue中的item
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>                <span style=color:#66d9ef>if</span> (item) <span style=color:#75715e>// 如果item存在，则处理该item
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>                {
+</span></span><span style=display:flex><span>                    ...
+</span></span><span style=display:flex><span>                    wq<span style=color:#f92672>-&gt;</span>_void_process(item, tp_handle); <span style=color:#75715e>// 执行_void_process对item进一步处理
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>                    ...
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><h3 id=执行work_queue的_void_dequeue方法>执行work_queue的_void_dequeue方法</h3><p>在我们写请求的场景中，需要关心的work_queue的类型应该为ImageRequestWQ*，_void_dequeue的实现在其父类PointerWQ中，</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>PointerWQ</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> WorkQueue_
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>protected</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>_void_dequeue() <span style=color:#66d9ef>override</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (m_items.empty()) <span style=color:#75715e>// 列表为空直接返回
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> NULL;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#f92672>++</span>m_processing;
+</span></span><span style=display:flex><span>        T <span style=color:#f92672>*</span>item <span style=color:#f92672>=</span> m_items.front(); <span style=color:#75715e>// 获取队列头部元素，即流程图中index为0的元素
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        m_items.pop_front(); <span style=color:#75715e>// 弹出队列头
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        <span style=color:#66d9ef>return</span> item;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><h2 id=写请求在librbd层的处理>写请求在librbd层的处理</h2><h3 id=主要工作内容-2>主要工作内容</h3><ul><li>利用ImageRequestWQ工作队列，对某请求执行阻塞控制，对读写操作进行保序</li><li>在ImageWriteRequest的处理下，结合块的layout信息，把对块内地址范围(image_extent)的请求，拆分成对块内多个对象的地址范围(object_extent)的请求</li><li>在ObjectWriteRequest中，把object_extent转换成librados::ObjectWriteOperation，其内部包含了更下层osdc(OSD客户端)层能够使用的OSDOp</li></ul><h3 id=imagerequestwq中的处理>ImageRequestWQ中的处理</h3><p>ThreadPool::worker中的wq._void_process在基类PointerWQ中实现，</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>PointerWQ</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> WorkQueue_
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>protected</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> _void_process(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>item, ThreadPool<span style=color:#f92672>::</span>TPHandle <span style=color:#f92672>&amp;</span>handle) <span style=color:#66d9ef>override</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        process(<span style=color:#66d9ef>reinterpret_cast</span><span style=color:#f92672>&lt;</span>T <span style=color:#f92672>*&gt;</span>(item));
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>其内调用的process在子类ImageRequestWQ*中被覆盖实现，</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> I<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> ImageRequestWQ<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>process(ImageDispatchSpec<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;</span> <span style=color:#f92672>*</span>req) {
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  process_io(req, true); <span style=color:#75715e>// 调用process_io继续处理
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  ...
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>ImageRequestWQ.process_io()方法</p><p>主要判断该req是否能够被立即执行，如果不能立即执行，需要重新入列继续排队等待。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> I<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> ImageRequestWQ<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>process_io(ImageDispatchSpec<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;</span> <span style=color:#f92672>*</span>req,
+</span></span><span style=display:flex><span>                                   <span style=color:#66d9ef>bool</span> non_blocking_io) {
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (write_op <span style=color:#f92672>&amp;&amp;</span> <span style=color:#f92672>!</span>req<span style=color:#f92672>-&gt;</span>blocked) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>bool</span> blocked <span style=color:#f92672>=</span> block_overlapping_io(<span style=color:#f92672>&amp;</span>m_in_flight_extents, offset, length); <span style=color:#75715e>// 判断该io是否该被阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>if</span> (blocked) { <span style=color:#75715e>// 如果阻塞了
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>	  ...
+</span></span><span style=display:flex><span>      req<span style=color:#f92672>-&gt;</span>blocked <span style=color:#f92672>=</span> true; <span style=color:#75715e>// 设置blocked标志位
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>      m_blocked_ios.push_back(req); <span style=color:#75715e>// 重新丢入m_blocked_ios队列中
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>      <span style=color:#66d9ef>return</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  req<span style=color:#f92672>-&gt;</span>send(); <span style=color:#75715e>// 调用ImageDispatchSpec的send方法
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  ...
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>delete</span> req;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>ImageRequestWQ.block_overlapping_io()方法</p><p>其主要是为了避免写I/O的冲突，即保证同一个I/O地址范围内的写时序，防止类似lost update等冲突问题，实现上比较简单</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> I<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>bool</span> ImageRequestWQ<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>block_overlapping_io(
+</span></span><span style=display:flex><span>    ImageExtentIntervals<span style=color:#f92672>*</span> in_flight_image_extents, <span style=color:#66d9ef>uint64_t</span> off, <span style=color:#66d9ef>uint64_t</span> len) {
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span>(len <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) { <span style=color:#75715e>// 写I/O的数据长度为0，不会更改数据，故不会阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>return</span> false; <span style=color:#75715e>// 返回不堵塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (in_flight_image_extents<span style=color:#f92672>-&gt;</span>empty() <span style=color:#f92672>||</span> <span style=color:#75715e>// 如果当前没有在途的I/O，则不堵塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>      <span style=color:#f92672>!</span>in_flight_image_extents<span style=color:#f92672>-&gt;</span>intersects(off, len)) { <span style=color:#75715e>// 或者在途的I/O中没有跟此次写入I/O地址重叠的，则不堵塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    in_flight_image_extents<span style=color:#f92672>-&gt;</span>insert(off, len); <span style=color:#75715e>// 把此次I/O放入in_flight_image_extents集合中
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>return</span> false; <span style=color:#75715e>// 返回不堵塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> true;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>主要工作内容：</p><ul><li>worker线程从工作队列(WQ)中取出一个写请求之后，需要检查该请求是否需要被阻塞</li><li>判断阻塞的主要标准是，该请求所需要写入的extents是否与工作队列上在途的extents(in_flight_image_extents)有重叠</li></ul><h3 id=imagedispatchspec中的处理>ImageDispatchSpec中的处理</h3><p>ImageDispatchSpec是一个中间调度层，主要的职责是把从ImageRequestWQ取出的req(即ImageDispatchSpec*对象本身)，分发到具体的ImageRequest上继续执行。</p><p>进一步下一步前，需要再具体回顾一下，客户端主线程ImageRequestWQ::aio_write()中，调用ImageDispatchSpec::create_write_request创建req的内容</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>static</span> ImageDispatchSpec<span style=color:#f92672>*</span> <span style=color:#a6e22e>create_write_request</span>(
+</span></span><span style=display:flex><span>    ImageCtxT <span style=color:#f92672>&amp;</span>image_ctx, AioCompletion <span style=color:#f92672>*</span>aio_comp, Extents <span style=color:#f92672>&amp;&amp;</span>image_extents,
+</span></span><span style=display:flex><span>    bufferlist <span style=color:#f92672>&amp;&amp;</span>bl, <span style=color:#66d9ef>int</span> op_flags, <span style=color:#66d9ef>const</span> ZTracer<span style=color:#f92672>::</span>Trace <span style=color:#f92672>&amp;</span>parent_trace, <span style=color:#66d9ef>uint64_t</span> tid) {
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>new</span> ImageDispatchSpec(image_ctx, aio_comp, std<span style=color:#f92672>::</span>move(image_extents),
+</span></span><span style=display:flex><span>                               Write{std<span style=color:#f92672>::</span>move(bl)}, op_flags, parent_trace, tid); <span style=color:#75715e>// 使用bl构造了个Write结构体类型的对象
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 构造函数
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>ImageDispatchSpec(ImageCtxT<span style=color:#f92672>&amp;</span> image_ctx, AioCompletion<span style=color:#f92672>*</span> aio_comp,
+</span></span><span style=display:flex><span>                   Extents<span style=color:#f92672>&amp;&amp;</span> image_extents, Request<span style=color:#f92672>&amp;&amp;</span> request,
+</span></span><span style=display:flex><span>                   <span style=color:#66d9ef>int</span> op_flags, <span style=color:#66d9ef>const</span> ZTracer<span style=color:#f92672>::</span>Trace<span style=color:#f92672>&amp;</span> parent_trace, <span style=color:#66d9ef>uint64_t</span> tid)
+</span></span><span style=display:flex><span>  <span style=color:#f92672>:</span> m_image_ctx(image_ctx), m_aio_comp(aio_comp),
+</span></span><span style=display:flex><span>    m_image_extents(std<span style=color:#f92672>::</span>move(image_extents)), m_request(std<span style=color:#f92672>::</span>move(request)), <span style=color:#75715e>// 使用request初始化m_request(apply_visitor中会用到)
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    m_op_flags(op_flags), m_parent_trace(parent_trace), m_tid(tid) {
+</span></span><span style=display:flex><span>  m_aio_comp<span style=color:#f92672>-&gt;</span>get();
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// Request类型定义
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span><span style=color:#66d9ef>typedef</span> boost<span style=color:#f92672>::</span>variant<span style=color:#f92672>&lt;</span>Read,
+</span></span><span style=display:flex><span>                       Discard,
+</span></span><span style=display:flex><span>                       Write,
+</span></span><span style=display:flex><span>                       WriteSame,
+</span></span><span style=display:flex><span>                       CompareAndWrite,
+</span></span><span style=display:flex><span>                       Flush<span style=color:#f92672>&gt;</span> Request; <span style=color:#75715e>// 包含6种类型的boot可变类型
+</span></span></span></code></pre></div><p>ImageDispatchSpec.send()方法</p><p>实现比较简单，直接调用了boost::apply_visitor函数。</p><pre tabindex=0><code>template &lt;typename I&gt;
+void ImageDispatchSpec&lt;I&gt;::send() {
+  boost::apply_visitor(SendVisitor{this}, m_request);
+}
+</code></pre><p>根据上面的分析，这里的m_request是类型为可变类型Request的引用，而被引用者是一个Write对象。</p><p>在SendVisitor中，会选择匹配的类型执行operator()函数：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=display:flex><span><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>ImageDispatchSpec</span><span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>SendVisitor
+</span></span><span style=display:flex><span>  : <span style=color:#66d9ef>public</span> boost<span style=color:#f92672>::</span>static_visitor<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>void</span><span style=color:#f92672>&gt;</span> {
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>operator</span>()(Read<span style=color:#f92672>&amp;</span> read) <span style=color:#66d9ef>const</span> {
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>operator</span>()(Discard<span style=color:#f92672>&amp;</span> discard) <span style=color:#66d9ef>const</span> {
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>operator</span>()(Write<span style=color:#f92672>&amp;</span> write) <span style=color:#66d9ef>const</span> { <span style=color:#75715e>// 动态地根据m_request的实际类型Write，调用到此处
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    ImageRequest<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>aio_write( <span style=color:#75715e>// 调用aio_write方法
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>      <span style=color:#f92672>&amp;</span>spec<span style=color:#f92672>-&gt;</span>m_image_ctx, spec<span style=color:#f92672>-&gt;</span>m_aio_comp, std<span style=color:#f92672>::</span>move(spec<span style=color:#f92672>-&gt;</span>m_image_extents),
+</span></span><span style=display:flex><span>      std<span style=color:#f92672>::</span>move(write.bl), spec<span style=color:#f92672>-&gt;</span>m_op_flags, spec<span style=color:#f92672>-&gt;</span>m_parent_trace);
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>operator</span>()(WriteSame<span style=color:#f92672>&amp;</span> write_same) <span style=color:#66d9ef>const</span> {
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>ImageRequest.aio_write()函数</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> I<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> ImageRequest<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>aio_write(I <span style=color:#f92672>*</span>ictx, AioCompletion <span style=color:#f92672>*</span>c,
+</span></span><span style=display:flex><span>                                Extents <span style=color:#f92672>&amp;&amp;</span>image_extents, bufferlist <span style=color:#f92672>&amp;&amp;</span>bl,
+</span></span><span style=display:flex><span>                                <span style=color:#66d9ef>int</span> op_flags,
+</span></span><span style=display:flex><span>				                <span style=color:#66d9ef>const</span> ZTracer<span style=color:#f92672>::</span>Trace <span style=color:#f92672>&amp;</span>parent_trace) {
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// 创建一个ImageWriteRequest
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  ImageWriteRequest<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;</span> req(<span style=color:#f92672>*</span>ictx, c, std<span style=color:#f92672>::</span>move(image_extents), std<span style=color:#f92672>::</span>move(bl),
+</span></span><span style=display:flex><span>                           op_flags, parent_trace);
+</span></span><span style=display:flex><span>  req.send(); <span style=color:#75715e>// 执行其send方法
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>}
+</span></span></code></pre></div><p>主要工作内容:</p><ul><li>ImageDispatchSpec的主要作用，是根据其在构造时的m_request(boost::variant类型)，动态调度到对应的ImageRequest上，执行request。</li></ul><h3 id=imagewriterequest中的处理>ImageWriteRequest中的处理</h3><p>此处涉及到的几个类及他们之间的关系</p><p><img src=.%5Csrc%5CImageRequestClass.drawio.png alt></p><p>ImageWriteRequest.send()方法，实现于基类ImageRequest中</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> I<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> ImageRequest<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>send() {
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>int</span> r <span style=color:#f92672>=</span> clip_request(); <span style=color:#75715e>// 裁剪请求
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>if</span> (r <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>    m_aio_comp<span style=color:#f92672>-&gt;</span>fail(r);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span>;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (finish_request_early()) { <span style=color:#75715e>// 根据m_image_extents计算total_bytes, 如果total_bytes == 0, 返回true
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>return</span>; <span style=color:#75715e>// 当待写入的total_bytes为0时, 直接返回, 提前结束请求
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (m_bypass_image_cache <span style=color:#f92672>||</span> m_image_ctx.image_cache <span style=color:#f92672>==</span> <span style=color:#66d9ef>nullptr</span>) { <span style=color:#75715e>// 如果置了m_bypass_image_cache, 或m_image_ctx.image_cache为空
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    update_timestamp();
+</span></span><span style=display:flex><span>    send_request();  <span style=color:#75715e>// 发送该请求
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  } <span style=color:#66d9ef>else</span> {
+</span></span><span style=display:flex><span>    send_image_cache_request();
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>ImageWriteRequest.send_request()方法，实现于父类AbstractImageWriteRequest中</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> I<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> AbstractImageWriteRequest<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>send_request() {
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  LightweightObjectExtents object_extents; <span style=color:#75715e>// 创建对象的extents, 实际类型为boost::container::small_vector的向量
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>auto</span> <span style=color:#f92672>&amp;</span>extent : <span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>m_image_extents) { <span style=color:#75715e>// 遍历image的多个地址空间分片(extents)的每一个
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>if</span> (extent.second <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) { <span style=color:#75715e>// 如果该image_extent的len为0, 对于写操作来说是无效的，直接丢弃
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>      <span style=color:#66d9ef>continue</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    Striper<span style=color:#f92672>::</span>file_to_extents(cct, <span style=color:#f92672>&amp;</span>image_ctx.layout, extent.first, <span style=color:#75715e>// 把image的地址空间分片，转换为多个对象的地址空间分片
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>                             extent.second, <span style=color:#ae81ff>0</span>, clip_len, <span style=color:#f92672>&amp;</span>object_extents);
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>object_extents.empty()) { <span style=color:#75715e>// 如果向量不为空
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    ...
+</span></span><span style=display:flex><span>    send_object_requests(object_extents, snapc, journal_tid); <span style=color:#75715e>// 调用到send_object_requests
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  }
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>Striper::file_to_extents()函数</p><p>对于一个Image地址空间的写请求的extent，该函数可以把它转换成多个对象地址空间上的写请求的extent。</p><p>除了image_extent.first(offset)和image_extent.second(length)作为输入外，还需要传入image_ctx.layout。layout中保存了当前image中比较重要的几个元数据，在rbd.open(image)之后会读取下来，其定义如下：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=display:flex><span><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>file_layout_t</span> {
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// file -&gt; object mapping
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>uint32_t</span> stripe_unit;   <span style=color:#75715e>///&lt; stripe unit, in bytes,
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>uint32_t</span> stripe_count;  <span style=color:#75715e>///&lt; over this many objects
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>uint32_t</span> object_size;   <span style=color:#75715e>///&lt; until objects are this big
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>int64_t</span> pool_id;        <span style=color:#75715e>///&lt; rados pool id
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  std<span style=color:#f92672>::</span>string pool_ns;         <span style=color:#75715e>///&lt; rados pool namespace
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>}
+</span></span></code></pre></div><p>函数的内容相对较为复杂，因为不是此次讨论的重点，下面给出原理图方便理解。</p><p>原理图(转载自陈小跑，https://www.cnblogs.com/chenxianpao/p/5572859.html)</p><p><img src=.%5Csrc%5Cfile_to_extents.jpg alt></p><p>ImageWriteRequest.send_request()方法，实现于父类AbstractImageWriteRequest中</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> I<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> AbstractImageWriteRequest<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>send_object_requests(
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>const</span> LightweightObjectExtents <span style=color:#f92672>&amp;</span>object_extents, <span style=color:#66d9ef>const</span> <span style=color:#f92672>::</span>SnapContext <span style=color:#f92672>&amp;</span>snapc,
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint64_t</span> journal_tid) {
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>auto</span><span style=color:#f92672>&amp;</span> oe : object_extents) { <span style=color:#75715e>// 遍历每一个对象的地址空间分片
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>auto</span> request <span style=color:#f92672>=</span> create_object_request(oe, snapc, journal_tid, single_extent, req_comp); <span style=color:#75715e>// 创建一个对象的写请求
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    request<span style=color:#f92672>-&gt;</span>send(); <span style=color:#75715e>// 执行请求的send方法
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  }
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>ImageWriteRequest.create_object_request()方法</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> I<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>ObjectDispatchSpec <span style=color:#f92672>*</span>ImageWriteRequest<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>create_object_request(
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>const</span> LightweightObjectExtent <span style=color:#f92672>&amp;</span>object_extent, <span style=color:#66d9ef>const</span> <span style=color:#f92672>::</span>SnapContext <span style=color:#f92672>&amp;</span>snapc,
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint64_t</span> journal_tid, <span style=color:#66d9ef>bool</span> single_extent, Context <span style=color:#f92672>*</span>on_finish) {
+</span></span><span style=display:flex><span>  I <span style=color:#f92672>&amp;</span>image_ctx <span style=color:#f92672>=</span> <span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>m_image_ctx;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  bufferlist bl;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (single_extent <span style=color:#f92672>&amp;&amp;</span> object_extent.buffer_extents.size() <span style=color:#f92672>==</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>&amp;&amp;</span> <span style=color:#75715e>// 该object_extent仅包含一个连续的地址段
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>      m_bl.length() <span style=color:#f92672>==</span> object_extent.length) {
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// optimization for single object/buffer extent writes
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    bl <span style=color:#f92672>=</span> std<span style=color:#f92672>::</span>move(m_bl); <span style=color:#75715e>// 直接使用image请求的buffer_list构造object请求的buffer_list
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  } <span style=color:#66d9ef>else</span> {
+</span></span><span style=display:flex><span>    assemble_extent(object_extent, <span style=color:#f92672>&amp;</span>bl); <span style=color:#75715e>// 根据object_extent中定义的多个地址段，从image请求的bl中截取出object_extent范围内的bl
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>auto</span> req <span style=color:#f92672>=</span> ObjectDispatchSpec<span style=color:#f92672>::</span>create_write( <span style=color:#75715e>// 创建一个ObjectDispatchSpec类型的req
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#f92672>&amp;</span>image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
+</span></span><span style=display:flex><span>    object_extent.offset, std<span style=color:#f92672>::</span>move(bl), snapc, m_op_flags, journal_tid,
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>m_trace, on_finish);
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> req;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>主要工作内容:</p><ul><li>ImageWriteRequest首先做了I/O裁剪、是否能够直接完求、是否需要缓存处理等工作</li><li>然后使用file_to_extents函数，把Image视角的写请求地址空间分片(image_extents)，转换成为一组对象视角的写请求地址空间分片(object_extent)</li><li>再遍历这组对象地址分片，创建多个对象请求分发说明(ObjectDispatchSpec)，过程中还会根据extent的范围，重新组装对象请求自己的bufferlist</li><li>最终执行send方法，执行对象请求分发说明中的相关逻辑</li></ul><h3 id=objectdispatchspec中的处理>ObjectDispatchSpec中的处理</h3><p>与ImageDispatchSpec原类似，ObjectDispatchSpec.send()方法，最终会调用到ObjectDispatcher::SendVisitor::operator(WriteRequest& write)中。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=display:flex><span><span style=color:#75715e>// 可变类型Request定义
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span><span style=color:#66d9ef>typedef</span> boost<span style=color:#f92672>::</span>variant<span style=color:#f92672>&lt;</span>ReadRequest,
+</span></span><span style=display:flex><span>                       DiscardRequest,
+</span></span><span style=display:flex><span>                       WriteRequest,
+</span></span><span style=display:flex><span>                       WriteSameRequest,
+</span></span><span style=display:flex><span>                       CompareAndWriteRequest,
+</span></span><span style=display:flex><span>                       FlushRequest<span style=color:#f92672>&gt;</span> Request;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> ImageCtxT<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>static</span> ObjectDispatchSpec<span style=color:#f92672>*</span> create_write(
+</span></span><span style=display:flex><span>    ImageCtxT<span style=color:#f92672>*</span> image_ctx, ObjectDispatchLayer object_dispatch_layer,
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint64_t</span> object_no, <span style=color:#66d9ef>uint64_t</span> object_off, ceph<span style=color:#f92672>::</span>bufferlist<span style=color:#f92672>&amp;&amp;</span> data,
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>const</span> <span style=color:#f92672>::</span>SnapContext <span style=color:#f92672>&amp;</span>snapc, <span style=color:#66d9ef>int</span> op_flags, <span style=color:#66d9ef>uint64_t</span> journal_tid,
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>const</span> ZTracer<span style=color:#f92672>::</span>Trace <span style=color:#f92672>&amp;</span>parent_trace, Context <span style=color:#f92672>*</span>on_finish) {
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>new</span> <span style=color:#a6e22e>ObjectDispatchSpec</span>(image_ctx<span style=color:#f92672>-&gt;</span>io_object_dispatcher,
+</span></span><span style=display:flex><span>                                object_dispatch_layer,
+</span></span><span style=display:flex><span>                                WriteRequest{object_no, object_off, <span style=color:#75715e>// 使用WriteRequest填充ObjectDispatchSpec的request属性
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>                                             std<span style=color:#f92672>::</span>move(data), snapc,
+</span></span><span style=display:flex><span>                                             journal_tid},
+</span></span><span style=display:flex><span>                                op_flags, parent_trace, on_finish);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 最终动态调度到拥有WriteRequest参数的operator(根据不同的Request类型进行了重载)方法上
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span><span style=color:#66d9ef>bool</span> <span style=color:#a6e22e>operator</span>()(ObjectDispatchSpec<span style=color:#f92672>::</span>WriteRequest<span style=color:#f92672>&amp;</span> write) <span style=color:#66d9ef>const</span> {
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> object_dispatch<span style=color:#f92672>-&gt;</span>write(
+</span></span><span style=display:flex><span>    write.object_no, write.object_off, std<span style=color:#f92672>::</span>move(write.data), write.snapc,
+</span></span><span style=display:flex><span>    object_dispatch_spec<span style=color:#f92672>-&gt;</span>op_flags, object_dispatch_spec<span style=color:#f92672>-&gt;</span>parent_trace,
+</span></span><span style=display:flex><span>    <span style=color:#f92672>&amp;</span>object_dispatch_spec<span style=color:#f92672>-&gt;</span>object_dispatch_flags, <span style=color:#f92672>&amp;</span>write.journal_tid,
+</span></span><span style=display:flex><span>    <span style=color:#f92672>&amp;</span>object_dispatch_spec<span style=color:#f92672>-&gt;</span>dispatch_result,
+</span></span><span style=display:flex><span>    <span style=color:#f92672>&amp;</span>object_dispatch_spec<span style=color:#f92672>-&gt;</span>dispatcher_ctx.on_finish,
+</span></span><span style=display:flex><span>    <span style=color:#f92672>&amp;</span>object_dispatch_spec<span style=color:#f92672>-&gt;</span>dispatcher_ctx);
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>ObjectDispatch.write()方法</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> I<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>bool</span> ObjectDispatch<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>write(
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint64_t</span> object_no, <span style=color:#66d9ef>uint64_t</span> object_off, ceph<span style=color:#f92672>::</span>bufferlist<span style=color:#f92672>&amp;&amp;</span> data,
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>const</span> <span style=color:#f92672>::</span>SnapContext <span style=color:#f92672>&amp;</span>snapc, <span style=color:#66d9ef>int</span> op_flags,
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>const</span> ZTracer<span style=color:#f92672>::</span>Trace <span style=color:#f92672>&amp;</span>parent_trace, <span style=color:#66d9ef>int</span><span style=color:#f92672>*</span> object_dispatch_flags,
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint64_t</span><span style=color:#f92672>*</span> journal_tid, DispatchResult<span style=color:#f92672>*</span> dispatch_result,
+</span></span><span style=display:flex><span>    Context<span style=color:#f92672>**</span> on_finish, Context<span style=color:#f92672>*</span> on_dispatched) {
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>auto</span> req <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> ObjectWriteRequest<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;</span>(m_image_ctx, object_no, object_off, <span style=color:#75715e>// 创建一个ObjectWriteRequest请求对象
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>                                       std<span style=color:#f92672>::</span>move(data), snapc, op_flags,
+</span></span><span style=display:flex><span>                                       parent_trace, on_dispatched);
+</span></span><span style=display:flex><span>  req<span style=color:#f92672>-&gt;</span>send(); <span style=color:#75715e>// 执行ObjectWriteRequest请求的send()方法
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>return</span> true;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>主要工作内容:</p><ul><li>ObjectDispatchSpec中，主要是根据创建它时指定的实际Request类型，创建不同的ObjectRequest进行处理。</li></ul><h3 id=objectwriterequest中的处理>ObjectWriteRequest中的处理</h3><p>当前场景下主要使用了两个类，ObjectWriteRequest与其父类AbstractObjectWriteRequest，他们之前的关系如下：</p><p><img src=.%5Csrc%5CObjectRequestClass.drawio.png alt></p><p>AbstractObjectWriteRequest.send()方法</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> I<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> AbstractObjectWriteRequest<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>send() {
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  {
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (image_ctx<span style=color:#f92672>-&gt;</span>object_map <span style=color:#f92672>==</span> <span style=color:#66d9ef>nullptr</span>) {
+</span></span><span style=display:flex><span>      m_object_may_exist <span style=color:#f92672>=</span> true;
+</span></span><span style=display:flex><span>    } <span style=color:#66d9ef>else</span> {
+</span></span><span style=display:flex><span>      ...
+</span></span><span style=display:flex><span>      m_object_may_exist <span style=color:#f92672>=</span> image_ctx<span style=color:#f92672>-&gt;</span>object_map<span style=color:#f92672>-&gt;</span>object_may_exist(<span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>m_object_no); <span style=color:#75715e>// 根据对象号到object_map查询该对象是否存在
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    }
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>m_object_may_exist <span style=color:#f92672>&amp;&amp;</span> is_no_op_for_nonexistent_object()) { <span style=color:#75715e>// 如果对象不存在，且该请求不包含对象操作(op)
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    ldout(image_ctx<span style=color:#f92672>-&gt;</span>cct, <span style=color:#ae81ff>20</span>) <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34;skipping no-op on nonexistent object&#34;</span>
+</span></span><span style=display:flex><span>                              <span style=color:#f92672>&lt;&lt;</span> dendl;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>async_finish(<span style=color:#ae81ff>0</span>); <span style=color:#75715e>// 直接完成
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>return</span>;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  pre_write_object_map_update();
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>AbstractObjectWriteRequest.pre_write_object_map_update()方法</p><p>主要更新用于保存镜像与父镜像之间映射关系的object_map</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> I<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> AbstractObjectWriteRequest<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>pre_write_object_map_update() {
+</span></span><span style=display:flex><span>  I <span style=color:#f92672>*</span>image_ctx <span style=color:#f92672>=</span> <span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>m_ictx;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  image_ctx<span style=color:#f92672>-&gt;</span>image_lock.lock_shared();
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (image_ctx<span style=color:#f92672>-&gt;</span>object_map <span style=color:#f92672>==</span> <span style=color:#66d9ef>nullptr</span> <span style=color:#f92672>||</span> <span style=color:#f92672>!</span>is_object_map_update_enabled()) { <span style=color:#75715e>// 如果镜像的object_map不存在
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    image_ctx<span style=color:#f92672>-&gt;</span>image_lock.unlock_shared();
+</span></span><span style=display:flex><span>    write_object();
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span>;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>m_object_may_exist <span style=color:#f92672>&amp;&amp;</span> m_copyup_enabled) { <span style=color:#75715e>// 如果对象不存在
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#75715e>// optimization: copyup required
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    image_ctx<span style=color:#f92672>-&gt;</span>image_lock.unlock_shared();
+</span></span><span style=display:flex><span>    copyup(); <span style=color:#75715e>// 处理克隆镜像的场景，先创建一个CopyupRequest请求把数据拷贝下来，再执行写对象请求
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>return</span>;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  write_object();
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>AbstractObjectWriteRequest.write_object()方法</p><p>主要功能是把针对某对象的写的请求(ObjectWriteRequest)，转换成针对OSD的ObjectWriteOperation，并向其填充ObjectOperation，最后使用data_ctx执行。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> I<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> AbstractObjectWriteRequest<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>write_object() {
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  librados<span style=color:#f92672>::</span>ObjectWriteOperation write; <span style=color:#75715e>// 创建一个librados::ObjectWriteOperation
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  ...
+</span></span><span style=display:flex><span>  add_write_ops(<span style=color:#f92672>&amp;</span>write); <span style=color:#75715e>// 为新创建的librados::ObjectWriteOperation填充相应的ObjectOperation
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  ...
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>int</span> r <span style=color:#f92672>=</span> image_ctx<span style=color:#f92672>-&gt;</span>data_ctx.aio_operate( <span style=color:#75715e>// 调用data_ctx.aio_operate()处理write操作
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    data_object_name(<span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>m_ictx, <span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>m_object_no), rados_completion, <span style=color:#75715e>// 计算对象名
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#f92672>&amp;</span>write, m_snap_seq, m_snaps,
+</span></span><span style=display:flex><span>    (<span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>m_trace.valid() <span style=color:#f92672>?</span> <span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>m_trace.get_info() <span style=color:#f92672>:</span> <span style=color:#66d9ef>nullptr</span>));
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  rados_completion<span style=color:#f92672>-&gt;</span>release();
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>ObjectWriteRequest.add_write_ops()方法</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> I<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> ObjectWriteRequest<span style=color:#f92672>&lt;</span>I<span style=color:#f92672>&gt;::</span>add_write_ops(librados<span style=color:#f92672>::</span>ObjectWriteOperation <span style=color:#f92672>*</span>wr) {
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (<span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>m_full_object) { <span style=color:#75715e>// 如果需要写入整个对象
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    wr<span style=color:#f92672>-&gt;</span>write_full(m_write_data);
+</span></span><span style=display:flex><span>  } <span style=color:#66d9ef>else</span> { <span style=color:#75715e>// 如果只写入对象的部分范围
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    wr<span style=color:#f92672>-&gt;</span>write(<span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>m_object_off, m_write_data); <span style=color:#75715e>// 带入offset参数，调用ObjectWriteOperation的write方法
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  }
+</span></span><span style=display:flex><span>  wr<span style=color:#f92672>-&gt;</span>set_op_flags2(m_op_flags); <span style=color:#75715e>// 为ObjectWriteOperation设置op的flag
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>}
+</span></span></code></pre></div><p>涉及到的主要数据结构及他们之间的关系:</p><p><img src=.%5Csrc%5CObjectOperationClass.drawio.png alt></p><p>整个ObjectWriteOperation.write()方法内部的工作流程及调用栈：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=display:flex><span><span style=color:#75715e>// ObjectWriteOperation.write方法()
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span><span style=color:#66d9ef>void</span> librados<span style=color:#f92672>::</span>ObjectWriteOperation<span style=color:#f92672>::</span>write(<span style=color:#66d9ef>uint64_t</span> off, <span style=color:#66d9ef>const</span> bufferlist<span style=color:#f92672>&amp;</span> bl)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  ceph_assert(impl);
+</span></span><span style=display:flex><span>  <span style=color:#f92672>::</span>ObjectOperation <span style=color:#f92672>*</span>o <span style=color:#f92672>=</span> <span style=color:#f92672>&amp;</span>impl<span style=color:#f92672>-&gt;</span>o; 
+</span></span><span style=display:flex><span>  bufferlist c <span style=color:#f92672>=</span> bl;
+</span></span><span style=display:flex><span>  o<span style=color:#f92672>-&gt;</span>write(off, c);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// src/osdc/Objecter.h
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>write</span>(<span style=color:#66d9ef>uint64_t</span> off, ceph<span style=color:#f92672>::</span>buffer<span style=color:#f92672>::</span>list<span style=color:#f92672>&amp;</span> bl) {
+</span></span><span style=display:flex><span>  write(off, bl, <span style=color:#ae81ff>0</span>, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// src/osdc/Objecter.h
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>write</span>(<span style=color:#66d9ef>uint64_t</span> off, ceph<span style=color:#f92672>::</span>buffer<span style=color:#f92672>::</span>list<span style=color:#f92672>&amp;</span> bl,
+</span></span><span style=display:flex><span>           <span style=color:#66d9ef>uint64_t</span> truncate_size,
+</span></span><span style=display:flex><span>           <span style=color:#66d9ef>uint32_t</span> truncate_seq) {
+</span></span><span style=display:flex><span>  add_data(CEPH_OSD_OP_WRITE, off, bl.length(), bl);
+</span></span><span style=display:flex><span>  OSDOp<span style=color:#f92672>&amp;</span> o <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>ops.rbegin();
+</span></span><span style=display:flex><span>  o.op.extent.truncate_size <span style=color:#f92672>=</span> truncate_size;
+</span></span><span style=display:flex><span>  o.op.extent.truncate_seq <span style=color:#f92672>=</span> truncate_seq;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// src/osdc/Objecter.h
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>add_data</span>(<span style=color:#66d9ef>int</span> op, <span style=color:#66d9ef>uint64_t</span> off, <span style=color:#66d9ef>uint64_t</span> len, ceph<span style=color:#f92672>::</span>buffer<span style=color:#f92672>::</span>list<span style=color:#f92672>&amp;</span> bl) {
+</span></span><span style=display:flex><span>  OSDOp<span style=color:#f92672>&amp;</span> osd_op <span style=color:#f92672>=</span> add_op(op); <span style=color:#75715e>// 根据op类型(此例中为CEPH_OSD_OP_WRITE)新增一个OSDOp，并返回其引用
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  osd_op.op.extent.offset <span style=color:#f92672>=</span> off; <span style=color:#75715e>// 设置op.extent的offset
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  osd_op.op.extent.length <span style=color:#f92672>=</span> len; <span style=color:#75715e>// 设置op.extent的length
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  osd_op.indata.claim_append(bl); <span style=color:#75715e>// 填充输入数据
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// src/osd/osd_types.h
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>OSDOp<span style=color:#f92672>&amp;</span> add_op(<span style=color:#66d9ef>int</span> op) {
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>int</span> s <span style=color:#f92672>=</span> ops.size(); <span style=color:#75715e>// 获取当前OSDOp向量的长度
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  ops.resize(s<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>); <span style=color:#75715e>// 新增一个OSDOp
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  ops[s].op.op <span style=color:#f92672>=</span> op; <span style=color:#75715e>// 填充op类型
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  out_bl.resize(s<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>  out_bl[s] <span style=color:#f92672>=</span> NULL;
+</span></span><span style=display:flex><span>  out_handler.resize(s<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>  out_handler[s] <span style=color:#f92672>=</span> NULL;
+</span></span><span style=display:flex><span>  out_rval.resize(s<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>  out_rval[s] <span style=color:#f92672>=</span> NULL;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> ops[s]; <span style=color:#75715e>// 返回新增的OSDOp
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>}
+</span></span></code></pre></div><p>ObjectWriteRequest.data_object_name()方法</p><p>根据对象的编号，计算对象名</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> I<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>std<span style=color:#f92672>::</span>string data_object_name(I<span style=color:#f92672>*</span> image_ctx, <span style=color:#66d9ef>uint64_t</span> object_no) {
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>char</span> buf[RBD_MAX_OBJ_NAME_SIZE]; <span style=color:#75715e>// #define RBD_MAX_OBJ_NAME_SIZE	96
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  size_t length <span style=color:#f92672>=</span> snprintf(buf, RBD_MAX_OBJ_NAME_SIZE,
+</span></span><span style=display:flex><span>    image_ctx<span style=color:#f92672>-&gt;</span>format_string, <span style=color:#75715e>// 例如: rbd_data.1104d8944d6a.%016llx, 前半部分为object_prefix, open image时从rbd_header读取，后半部分为字符串的填充格式定义
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    object_no); <span style=color:#75715e>// 对象在镜像地址空间内的编号
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  ...
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>主要工作内容:</p><ul><li>先对无op且对象不存在的请求进行优化，即直接结束处理</li><li>接着如果是克隆的镜像，当被访问对象还不存在时，调用copyup()拷贝对象数据到本地镜像中</li><li>再创建一个librados::ObjectWriteOperation对象，并填充相应的ObjectOperation。ObjectOperation是对底层数据结构ceph_osd_op的层层封装。</li><li>因为是数据I/O，则调用镜像上下文(image_ctx)的数据存储池上下文(data_ctx)的aio_operate()方法继续处理。</li></ul><h2 id=写请求在librados层的处理>写请求在librados层的处理</h2><p>经过上一节的处理，块层的业务逻辑至此结束，交由librados库中继续处理。</p><h3 id=主要工作内容-3>主要工作内容</h3><ul><li>librados层这里的处理比较简单，主要是根据ObjectOperation中的一组OSDOp构造osdc层的Op对象。</li><li>然后执行Objecter.op_submit()方法处理该Op对象</li></ul><h3 id=调用流程>调用流程</h3><p>librados::IoCtx.aio_operate()方法</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>int</span> librados<span style=color:#f92672>::</span>IoCtx<span style=color:#f92672>::</span>aio_operate(<span style=color:#66d9ef>const</span> std<span style=color:#f92672>::</span>string<span style=color:#f92672>&amp;</span> oid, AioCompletion <span style=color:#f92672>*</span>c,
+</span></span><span style=display:flex><span>         librados<span style=color:#f92672>::</span>ObjectWriteOperation <span style=color:#f92672>*</span>o,
+</span></span><span style=display:flex><span>         snap_t snap_seq, std<span style=color:#f92672>::</span>vector<span style=color:#f92672>&lt;</span>snap_t<span style=color:#f92672>&gt;&amp;</span> snaps,
+</span></span><span style=display:flex><span>         <span style=color:#66d9ef>const</span> blkin_trace_info <span style=color:#f92672>*</span>trace_info)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  ... <span style=color:#75715e>// SnapContext相关处理
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>return</span> io_ctx_impl<span style=color:#f92672>-&gt;</span>aio_operate(obj, <span style=color:#f92672>&amp;</span>o<span style=color:#f92672>-&gt;</span>impl<span style=color:#f92672>-&gt;</span>o, c<span style=color:#f92672>-&gt;</span>pc,
+</span></span><span style=display:flex><span>          snapc, <span style=color:#ae81ff>0</span>, trace_info);
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>librados::IoCtxImpl.aio_operate()方法</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>int</span> librados<span style=color:#f92672>::</span>IoCtxImpl<span style=color:#f92672>::</span>aio_operate(<span style=color:#66d9ef>const</span> object_t<span style=color:#f92672>&amp;</span> oid,
+</span></span><span style=display:flex><span>				     <span style=color:#f92672>::</span>ObjectOperation <span style=color:#f92672>*</span>o, AioCompletionImpl <span style=color:#f92672>*</span>c,
+</span></span><span style=display:flex><span>				     <span style=color:#66d9ef>const</span> SnapContext<span style=color:#f92672>&amp;</span> snap_context, <span style=color:#66d9ef>int</span> flags,
+</span></span><span style=display:flex><span>                                     <span style=color:#66d9ef>const</span> blkin_trace_info <span style=color:#f92672>*</span>trace_info)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  <span style=color:#75715e>/* can&#39;t write to a snapshot */</span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (snap_seq <span style=color:#f92672>!=</span> CEPH_NOSNAP)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span>EROFS;
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  c<span style=color:#f92672>-&gt;</span>io <span style=color:#f92672>=</span> <span style=color:#66d9ef>this</span>;
+</span></span><span style=display:flex><span>  queue_aio_write(c); <span style=color:#75715e>// 把AioCompletionImpl中的aio_write_list_item加入到this-&gt;aio_write_list中
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  ...
+</span></span><span style=display:flex><span>  Objecter<span style=color:#f92672>::</span>Op <span style=color:#f92672>*</span>op <span style=color:#f92672>=</span> objecter<span style=color:#f92672>-&gt;</span>prepare_mutate_op(
+</span></span><span style=display:flex><span>    oid, oloc, <span style=color:#f92672>*</span>o, snap_context, ut, flags,
+</span></span><span style=display:flex><span>    oncomplete, <span style=color:#f92672>&amp;</span>c<span style=color:#f92672>-&gt;</span>objver, osd_reqid_t(), <span style=color:#f92672>&amp;</span>trace);
+</span></span><span style=display:flex><span>  objecter<span style=color:#f92672>-&gt;</span>op_submit(op, <span style=color:#f92672>&amp;</span>c<span style=color:#f92672>-&gt;</span>tid);
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>Objecter.prepare_mutate_op()方法</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span>Op <span style=color:#f92672>*</span><span style=color:#a6e22e>prepare_mutate_op</span>(
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>const</span> object_t<span style=color:#f92672>&amp;</span> oid, <span style=color:#66d9ef>const</span> object_locator_t<span style=color:#f92672>&amp;</span> oloc,
+</span></span><span style=display:flex><span>  ObjectOperation<span style=color:#f92672>&amp;</span> op, <span style=color:#66d9ef>const</span> SnapContext<span style=color:#f92672>&amp;</span> snapc,
+</span></span><span style=display:flex><span>  ceph<span style=color:#f92672>::</span>real_time mtime, <span style=color:#66d9ef>int</span> flags,
+</span></span><span style=display:flex><span>  Context <span style=color:#f92672>*</span>oncommit, version_t <span style=color:#f92672>*</span>objver <span style=color:#f92672>=</span> NULL,
+</span></span><span style=display:flex><span>  osd_reqid_t reqid <span style=color:#f92672>=</span> osd_reqid_t(),
+</span></span><span style=display:flex><span>  ZTracer<span style=color:#f92672>::</span>Trace <span style=color:#f92672>*</span>parent_trace <span style=color:#f92672>=</span> <span style=color:#66d9ef>nullptr</span>) {
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// 根据对象名, ObjectOperation.ops等信息构建Objecter::Op*类型对象op
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  Op <span style=color:#f92672>*</span>o <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> Op(oid, oloc, op.ops, flags <span style=color:#f92672>|</span> global_op_flags <span style=color:#f92672>|</span>
+</span></span><span style=display:flex><span>	   CEPH_OSD_FLAG_WRITE, oncommit, objver, <span style=color:#66d9ef>nullptr</span>, parent_trace);
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// 填充其他属性
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  o<span style=color:#f92672>-&gt;</span>priority <span style=color:#f92672>=</span> op.priority;
+</span></span><span style=display:flex><span>  o<span style=color:#f92672>-&gt;</span>mtime <span style=color:#f92672>=</span> mtime;
+</span></span><span style=display:flex><span>  o<span style=color:#f92672>-&gt;</span>snapc <span style=color:#f92672>=</span> snapc;
+</span></span><span style=display:flex><span>  o<span style=color:#f92672>-&gt;</span>out_rval.swap(op.out_rval);
+</span></span><span style=display:flex><span>  o<span style=color:#f92672>-&gt;</span>out_bl.swap(op.out_bl);
+</span></span><span style=display:flex><span>  o<span style=color:#f92672>-&gt;</span>out_handler.swap(op.out_handler);
+</span></span><span style=display:flex><span>  o<span style=color:#f92672>-&gt;</span>reqid <span style=color:#f92672>=</span> reqid;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> o;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><h2 id=写请求在osdc层的处理>写请求在osdc层的处理</h2><p>osdc层负责对请求的封装，以及通过网络模块发送请求的工作。</p><h3 id=主要工作内容-4>主要工作内容</h3><ul><li>Objecter中先做了流控、超时方面的处理</li><li>然后根据存储池配置、crushmap计算出object所在的主OSD</li><li>根据OSD的ID获取一个已有的或者建立一个新的会话，其中最主要的是利用messenger.connect_to_osd()建立一个套接字连接</li><li>再把Objector::Op请求转换成下层的消息层所使用的MOSDOp</li><li>最后使用会话中的连接把该消息发送出去，至此完成写I/O的主要调用流程</li></ul><h3 id=objecter类定义>Objecter类定义</h3><p>objecter是osdc中的一个核心类</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Objecter</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> md_config_obs_t, <span style=color:#66d9ef>public</span> Dispatcher {
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>  Messenger <span style=color:#f92672>*</span>messenger; <span style=color:#75715e>// 消息模块
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  MonClient <span style=color:#f92672>*</span>monc; <span style=color:#75715e>// Monitor客户端
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  ...
+</span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>  std<span style=color:#f92672>::</span>unique_ptr<span style=color:#f92672>&lt;</span>OSDMap<span style=color:#f92672>&gt;</span> osdmap; <span style=color:#75715e>// 指向osdmap
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>...
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>  <span style=color:#75715e>/*** track pending operations ***/</span>
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// read
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>OSDSession</span>; <span style=color:#75715e>// OSD会话
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>op_target_t</span> {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> flags <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    epoch_t epoch <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;  <span style=color:#75715e>///&lt; latest epoch we calculated the mapping
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#75715e>///&lt; explcit pg target, if any
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    pg_t base_pgid;
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> osd <span style=color:#f92672>=</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;      <span style=color:#75715e>///&lt; the final target osd, or -1
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>	...
+</span></span><span style=display:flex><span>  };
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>Op</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> RefCountedObject {
+</span></span><span style=display:flex><span>    OSDSession <span style=color:#f92672>*</span>session; <span style=color:#75715e>// 关联的OSD会话
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    ...
+</span></span><span style=display:flex><span>    op_target_t target; <span style=color:#75715e>// op的目标结构体，主要定义了osd号、pgid、epoch号
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    ...
+</span></span><span style=display:flex><span>    std<span style=color:#f92672>::</span>vector<span style=color:#f92672>&lt;</span>OSDOp<span style=color:#f92672>&gt;</span> ops; <span style=color:#75715e>// 一组OSDOp
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> priority; <span style=color:#75715e>// op的优先级
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    ...
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><h3 id=调用流程-1>调用流程</h3><p>Objecter.op_submit()方法</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>void</span> Objecter<span style=color:#f92672>::</span>op_submit(Op <span style=color:#f92672>*</span>op, ceph_tid_t <span style=color:#f92672>*</span>ptid, <span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>ctx_budget)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  _op_submit_with_budget(op, rl, ptid, ctx_budget);
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>Objecter._op_submit_with_budget()方法</p><p>主要包含对op的流量控制和超时处理</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>void</span> Objecter<span style=color:#f92672>::</span>_op_submit_with_budget(Op <span style=color:#f92672>*</span>op, shunique_lock<span style=color:#f92672>&amp;</span> sul,
+</span></span><span style=display:flex><span>				      ceph_tid_t <span style=color:#f92672>*</span>ptid,
+</span></span><span style=display:flex><span>				      <span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>ctx_budget)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// throttle.  before we look at any state, because
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#75715e>// _take_op_budget() may drop our lock while it blocks.
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>op<span style=color:#f92672>-&gt;</span>ctx_budgeted <span style=color:#f92672>||</span> (ctx_budget <span style=color:#f92672>&amp;&amp;</span> (<span style=color:#f92672>*</span>ctx_budget <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>))) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> op_budget <span style=color:#f92672>=</span> _take_op_budget(op, sul);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// take and pass out the budget for the first OP
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#75715e>// in the context session
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>if</span> (ctx_budget <span style=color:#f92672>&amp;&amp;</span> (<span style=color:#f92672>*</span>ctx_budget <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)) {
+</span></span><span style=display:flex><span>      <span style=color:#f92672>*</span>ctx_budget <span style=color:#f92672>=</span> op_budget;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (osd_timeout <span style=color:#f92672>&gt;</span> timespan(<span style=color:#ae81ff>0</span>)) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (op<span style=color:#f92672>-&gt;</span>tid <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>      op<span style=color:#f92672>-&gt;</span>tid <span style=color:#f92672>=</span> <span style=color:#f92672>++</span>last_tid;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>auto</span> tid <span style=color:#f92672>=</span> op<span style=color:#f92672>-&gt;</span>tid;
+</span></span><span style=display:flex><span>    op<span style=color:#f92672>-&gt;</span>ontimeout <span style=color:#f92672>=</span> timer.add_event(osd_timeout, <span style=color:#75715e>// 设置op的超时时间, 及相应的回调函数
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>				    [<span style=color:#66d9ef>this</span>, tid]() {
+</span></span><span style=display:flex><span>				      op_cancel(tid, <span style=color:#f92672>-</span>ETIMEDOUT); });
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  _op_submit(op, sul, ptid);
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>Objecter._op_submit()方法</p><p>op_submit()方法十分重要，最主要的是使用_calc_target()方法，对object经过一系列计算，得出其所在的pg及osd，从而决定此op发往哪一个osd，具体细节这里先不展开。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>void</span> Objecter<span style=color:#f92672>::</span>_op_submit(Op <span style=color:#f92672>*</span>op, shunique_lock<span style=color:#f92672>&amp;</span> sul, ceph_tid_t <span style=color:#f92672>*</span>ptid)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  OSDSession <span style=color:#f92672>*</span>s <span style=color:#f92672>=</span> NULL;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>bool</span> check_for_latest_map <span style=color:#f92672>=</span> _calc_target(<span style=color:#f92672>&amp;</span>op<span style=color:#f92672>-&gt;</span>target, <span style=color:#66d9ef>nullptr</span>) <span style=color:#75715e>// 计算该object所在的主OSD, 并填充到op-&gt;target.osd
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#f92672>==</span> RECALC_OP_TARGET_POOL_DNE;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// Try to get a session, including a retry if we need to take write lock
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>int</span> r <span style=color:#f92672>=</span> _get_session(op<span style=color:#f92672>-&gt;</span>target.osd, <span style=color:#f92672>&amp;</span>s, sul);
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  _send_op_account(op); <span style=color:#75715e>// 根据op的内容添加审计日志
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  ...
+</span></span><span style=display:flex><span>  _session_op_assign(s, op); <span style=color:#75715e>// 把该op与OSDSession进行绑定
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (need_send) {
+</span></span><span style=display:flex><span>    _send_op(op); <span style=color:#75715e>// 将op发送出去
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  }
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>Objecter::_get_session()方法</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>int</span> Objecter<span style=color:#f92672>::</span>_get_session(<span style=color:#66d9ef>int</span> osd, OSDSession <span style=color:#f92672>**</span>session, shunique_lock<span style=color:#f92672>&amp;</span> sul)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  map<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span>,OSDSession<span style=color:#f92672>*&gt;::</span>iterator p <span style=color:#f92672>=</span> osd_sessions.find(osd); <span style=color:#75715e>// 首先在已经创建的OSDSession表中根据osd_id进行查找
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>if</span> (p <span style=color:#f92672>!=</span> osd_sessions.end()) {
+</span></span><span style=display:flex><span>    OSDSession <span style=color:#f92672>*</span>s <span style=color:#f92672>=</span> p<span style=color:#f92672>-&gt;</span>second;
+</span></span><span style=display:flex><span>    s<span style=color:#f92672>-&gt;</span>get();
+</span></span><span style=display:flex><span>    <span style=color:#f92672>*</span>session <span style=color:#f92672>=</span> s;
+</span></span><span style=display:flex><span>    ldout(cct, <span style=color:#ae81ff>20</span>) <span style=color:#f92672>&lt;&lt;</span> __func__ <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34; s=&#34;</span> <span style=color:#f92672>&lt;&lt;</span> s <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34; osd=&#34;</span> <span style=color:#f92672>&lt;&lt;</span> osd <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34; &#34;</span>
+</span></span><span style=display:flex><span>		   <span style=color:#f92672>&lt;&lt;</span> s<span style=color:#f92672>-&gt;</span>get_nref() <span style=color:#f92672>&lt;&lt;</span> dendl;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  OSDSession <span style=color:#f92672>*</span>s <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> OSDSession(cct, osd); <span style=color:#75715e>// 新建一个OSDSession
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  osd_sessions[osd] <span style=color:#f92672>=</span> s; <span style=color:#75715e>// 把新的OSDSession加入OSDSession表中
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  s<span style=color:#f92672>-&gt;</span>con <span style=color:#f92672>=</span> messenger<span style=color:#f92672>-&gt;</span>connect_to_osd(osdmap<span style=color:#f92672>-&gt;</span>get_addrs(osd)); <span style=color:#75715e>// 根据osd的地址, 调用messenger-&gt;connect_to_osd获取连接
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  ...
+</span></span><span style=display:flex><span>  s<span style=color:#f92672>-&gt;</span>get();
+</span></span><span style=display:flex><span>  <span style=color:#f92672>*</span>session <span style=color:#f92672>=</span> s; <span style=color:#75715e>// 返回新OSDSession的地址
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  ldout(cct, <span style=color:#ae81ff>20</span>) <span style=color:#f92672>&lt;&lt;</span> __func__ <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34; s=&#34;</span> <span style=color:#f92672>&lt;&lt;</span> s <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34; osd=&#34;</span> <span style=color:#f92672>&lt;&lt;</span> osd <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34; &#34;</span>
+</span></span><span style=display:flex><span>		 <span style=color:#f92672>&lt;&lt;</span> s<span style=color:#f92672>-&gt;</span>get_nref() <span style=color:#f92672>&lt;&lt;</span> dendl;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>Objecter._send_op()方法</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>void</span> Objecter<span style=color:#f92672>::</span>_send_op(Op <span style=color:#f92672>*</span>op)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  MOSDOp <span style=color:#f92672>*</span>m <span style=color:#f92672>=</span> _prepare_osd_op(op); <span style=color:#75715e>// 根据Op创建一个MOSDOp, 并进行填充
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (op<span style=color:#f92672>-&gt;</span>target.actual_pgid <span style=color:#f92672>!=</span> m<span style=color:#f92672>-&gt;</span>get_spg()) {
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    m<span style=color:#f92672>-&gt;</span>set_spg(op<span style=color:#f92672>-&gt;</span>target.actual_pgid); <span style=color:#75715e>// 填充pgid
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    m<span style=color:#f92672>-&gt;</span>clear_payload();  <span style=color:#75715e>// reencode
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  }
+</span></span><span style=display:flex><span>  ...
+</span></span><span style=display:flex><span>  op<span style=color:#f92672>-&gt;</span>session<span style=color:#f92672>-&gt;</span>con<span style=color:#f92672>-&gt;</span>send_message(m); <span style=color:#75715e>// 根据已创建的连接发送该MOSDOp消息
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>}
+</span></span></code></pre></div><p>至此，整个librbd客户端的写I/O工作流程就已经完成，等到目标OSD处理完写I/O业务并返回时，客户端又会层层回调，最终ImageRequestWQ.write()中的
+cond.wait()返回，今儿完成了一次Image.write()操作。</p><h2 id=参考>参考</h2><ul><li><p><a href=https://github.com/ceph/ceph/tree/main/src/librbd>source code</a></p></li><li><p><a href=https://www.cnblogs.com/chenxianpao/p/5572859.html>Ceph源码解析：读写流程</a></p></li></ul><ul class=pa0><li class="list di"><a href=/tags/librbd/ class="link f5 grow no-underline br-pill ba ph3 pv2 mb2 dib black sans-serif">librbd</a></li></ul><div class="mt6 instapaper_ignoref"></div></div><aside class="w-30-l mt6-l"><div class="bg-light-gray pa3 nested-list-reset nested-copy-line-height nested-links"><p class="f5 b mb3">Related</p><ul class="pa0 list"><li class=mb2><a href=/post/librbd_compile/>Librbd学习1: 调试环境搭建</a></li></ul></div></aside></article></main><footer class="bg-black bottom-0 w-100 pa3" role=contentinfo><div class="flex justify-between"><a class="f4 fw4 hover-white no-underline white-70 dn dib-ns pv2 ph3" href=https://hawkhe.github.io/>&copy; Hawk's Blog 2023</a><div><div class=ananke-socials></div></div></div></footer></body></html>
