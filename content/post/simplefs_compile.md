@@ -1,6 +1,6 @@
 ---
-title: "SimpleFS文件系统学习1: 初次使用"
-date: 2023-02-04T00:25:43+08:00
+title: "SimpleFS文件系统1: 初次使用"
+date: 2020-05-07T00:25:43+08:00
 tags: ["simplefs", "fs"]
 draft: false
 ---
