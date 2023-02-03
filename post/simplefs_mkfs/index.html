@@ -1,0 +1,193 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta http-equiv=x-ua-compatible content="IE=edge,chrome=1"><title>SimpleFS文件系统2: 格式化 | Hawk's Blog</title><meta name=viewport content="width=device-width,minimum-scale=1"><meta name=description content="格式化程序mkfs.c 格式化的功能在源码中的mkfs.c中实现，其main函数中的主要环节已经写好了注释:
+int main(int argc, char **argv) { ... /* Open disk image */ int fd = open(argv[1], O_RDWR); ... /* Get image size */ struct stat stat_buf; int ret = fstat(fd, &stat_buf); ... /* Get block device size */ if ((stat_buf.st_mode & S_IFMT) == S_IFBLK) { long int blk_size = 0; ret = ioctl(fd, BLKGETSIZE64, &blk_size); // 使用ioctl获取块设备大小 ... stat_buf.st_size = blk_size; } /* Check if image is large enough */ long int min_size = 100 * SIMPLEFS_BLOCK_SIZE; // min_size = 400KB if (stat_buf."><meta name=generator content="Hugo 0.110.0"><meta name=robots content="noindex, nofollow"><link rel=stylesheet href=/ananke/css/main.min.css><meta property="og:title" content="SimpleFS文件系统2: 格式化"><meta property="og:description" content="格式化程序mkfs.c 格式化的功能在源码中的mkfs.c中实现，其main函数中的主要环节已经写好了注释:
+int main(int argc, char **argv) { ... /* Open disk image */ int fd = open(argv[1], O_RDWR); ... /* Get image size */ struct stat stat_buf; int ret = fstat(fd, &stat_buf); ... /* Get block device size */ if ((stat_buf.st_mode & S_IFMT) == S_IFBLK) { long int blk_size = 0; ret = ioctl(fd, BLKGETSIZE64, &blk_size); // 使用ioctl获取块设备大小 ... stat_buf.st_size = blk_size; } /* Check if image is large enough */ long int min_size = 100 * SIMPLEFS_BLOCK_SIZE; // min_size = 400KB if (stat_buf."><meta property="og:type" content="article"><meta property="og:url" content="https://hawkhe.github.io/post/simplefs_mkfs/"><meta property="article:section" content="post"><meta property="article:published_time" content="2020-05-22T00:25:43+08:00"><meta property="article:modified_time" content="2020-05-22T00:25:43+08:00"><meta itemprop=name content="SimpleFS文件系统2: 格式化"><meta itemprop=description content="格式化程序mkfs.c 格式化的功能在源码中的mkfs.c中实现，其main函数中的主要环节已经写好了注释:
+int main(int argc, char **argv) { ... /* Open disk image */ int fd = open(argv[1], O_RDWR); ... /* Get image size */ struct stat stat_buf; int ret = fstat(fd, &stat_buf); ... /* Get block device size */ if ((stat_buf.st_mode & S_IFMT) == S_IFBLK) { long int blk_size = 0; ret = ioctl(fd, BLKGETSIZE64, &blk_size); // 使用ioctl获取块设备大小 ... stat_buf.st_size = blk_size; } /* Check if image is large enough */ long int min_size = 100 * SIMPLEFS_BLOCK_SIZE; // min_size = 400KB if (stat_buf."><meta itemprop=datePublished content="2020-05-22T00:25:43+08:00"><meta itemprop=dateModified content="2020-05-22T00:25:43+08:00"><meta itemprop=wordCount content="763"><meta itemprop=keywords content="simplefs,fs,"><meta name=twitter:card content="summary"><meta name=twitter:title content="SimpleFS文件系统2: 格式化"><meta name=twitter:description content="格式化程序mkfs.c 格式化的功能在源码中的mkfs.c中实现，其main函数中的主要环节已经写好了注释:
+int main(int argc, char **argv) { ... /* Open disk image */ int fd = open(argv[1], O_RDWR); ... /* Get image size */ struct stat stat_buf; int ret = fstat(fd, &stat_buf); ... /* Get block device size */ if ((stat_buf.st_mode & S_IFMT) == S_IFBLK) { long int blk_size = 0; ret = ioctl(fd, BLKGETSIZE64, &blk_size); // 使用ioctl获取块设备大小 ... stat_buf.st_size = blk_size; } /* Check if image is large enough */ long int min_size = 100 * SIMPLEFS_BLOCK_SIZE; // min_size = 400KB if (stat_buf."></head><body class="ma0 avenir bg-near-white"><header><div class=bg-black><nav class="pv3 ph3 ph4-ns" role=navigation><div class="flex-l justify-between items-center center"><a href=/ class="f3 fw2 hover-white no-underline white-90 dib">Hawk's Blog</a><div class="flex-l items-center"><ul class="pl0 mr3"><li class="list f5 f4-ns fw4 dib pr3"><a class="hover-white no-underline white-90" href=/post/ title="Articles page">Articles</a></li></ul><div class=ananke-socials></div></div></div></nav></div></header><main class=pb7 role=main><article class="flex-l flex-wrap justify-between mw8 center ph3"><header class="mt4 w-100"><aside class="instapaper_ignoref b helvetica tracked">ARTICLES</aside><div id=sharing class="mt3 ananke-socials"></div><h1 class="f1 athelas mt3 mb1">SimpleFS文件系统2: 格式化</h1><time class="f6 mv4 dib tracked" datetime=2020-05-22T00:25:43+08:00>May 22, 2020</time></header><div class="nested-copy-line-height lh-copy serif f4 nested-links mid-gray pr4-l w-two-thirds-l"><h2 id=格式化程序mkfsc>格式化程序mkfs.c</h2><p>格式化的功能在源码中的mkfs.c中实现，其main函数中的主要环节已经写好了注释:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>(<span style=color:#66d9ef>int</span> argc, <span style=color:#66d9ef>char</span> <span style=color:#f92672>**</span>argv)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* Open disk image */</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> fd <span style=color:#f92672>=</span> <span style=color:#a6e22e>open</span>(argv[<span style=color:#ae81ff>1</span>], O_RDWR);
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* Get image size */</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> stat stat_buf;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>fstat</span>(fd, <span style=color:#f92672>&amp;</span>stat_buf);
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* Get block device size */</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> ((stat_buf.st_mode <span style=color:#f92672>&amp;</span> S_IFMT) <span style=color:#f92672>==</span> S_IFBLK) {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>long</span> <span style=color:#66d9ef>int</span> blk_size <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>        ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>ioctl</span>(fd, BLKGETSIZE64, <span style=color:#f92672>&amp;</span>blk_size); <span style=color:#75715e>// 使用ioctl获取块设备大小
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        ...
+</span></span><span style=display:flex><span>        stat_buf.st_size <span style=color:#f92672>=</span> blk_size;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* Check if image is large enough */</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>long</span> <span style=color:#66d9ef>int</span> min_size <span style=color:#f92672>=</span> <span style=color:#ae81ff>100</span> <span style=color:#f92672>*</span> SIMPLEFS_BLOCK_SIZE; <span style=color:#75715e>// min_size = 400KB
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>if</span> (stat_buf.st_size <span style=color:#f92672>&lt;=</span> min_size) {
+</span></span><span style=display:flex><span>        ...
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>goto</span> fclose;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* Write superblock (block 0) */</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> superblock <span style=color:#f92672>*</span>sb <span style=color:#f92672>=</span> <span style=color:#a6e22e>write_superblock</span>(fd, <span style=color:#f92672>&amp;</span>stat_buf);
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* Write inode store blocks (from block 1) */</span>
+</span></span><span style=display:flex><span>    ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>write_inode_store</span>(fd, sb);
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* Write inode free bitmap blocks */</span>
+</span></span><span style=display:flex><span>    ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>write_ifree_blocks</span>(fd, sb);
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* Write block free bitmap blocks */</span>
+</span></span><span style=display:flex><span>    ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>write_bfree_blocks</span>(fd, sb);
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* Write data blocks */</span>
+</span></span><span style=display:flex><span>    ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>write_data_blocks</span>(fd, sb);
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>free_sb:
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>free</span>(sb);
+</span></span><span style=display:flex><span>fclose:
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>close</span>(fd);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> ret;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>其中，前半部分的打开块设备文件、检查文件类型、检测是否满足文件系统最小大小等步骤很好理解，这里不在赘述，后续主要分析是如何对块设备的布局进行规划，如何填充各个初始化状态下的数据结构并写入到块设备中的。</p><h2 id=超级块数据写入>超级块数据写入</h2><p>超级块的写入，体现了SimpleFS对整个设备分区的布局和规划，主要的步骤已经注释在核心代码中:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C data-lang=C><span style=display:flex><span><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>struct</span> superblock <span style=color:#f92672>*</span><span style=color:#a6e22e>write_superblock</span>(<span style=color:#66d9ef>int</span> fd, <span style=color:#66d9ef>struct</span> stat <span style=color:#f92672>*</span>fstats)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> superblock <span style=color:#f92672>*</span>sb <span style=color:#f92672>=</span> <span style=color:#a6e22e>malloc</span>(<span style=color:#66d9ef>sizeof</span>(<span style=color:#66d9ef>struct</span> superblock));
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint32_t</span> nr_blocks <span style=color:#f92672>=</span> fstats<span style=color:#f92672>-&gt;</span>st_size <span style=color:#f92672>/</span> SIMPLEFS_BLOCK_SIZE; <span style=color:#75715e>// 块数目 = 块设备大小 / 块大小
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>uint32_t</span> nr_inodes <span style=color:#f92672>=</span> nr_blocks; <span style=color:#75715e>// 定义inode数目等于块数目，这里取了理论最大值，即假设一个文件占用一个数据块
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>uint32_t</span> mod <span style=color:#f92672>=</span> nr_inodes <span style=color:#f92672>%</span> SIMPLEFS_INODES_PER_BLOCK; <span style=color:#75715e>// 与一个块能存储的inode信息数目取模
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>if</span> (mod) <span style=color:#75715e>// 如果未对齐(最后一个存储inode信息的块未利用完)
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        nr_inodes <span style=color:#f92672>+=</span> SIMPLEFS_INODES_PER_BLOCK <span style=color:#f92672>-</span> mod; <span style=color:#75715e>// 因为存储inode信息的最后一个块有空闲空间，故能够多存储(SIMPLEFS_INODES_PER_BLOCK - mod)个inode。
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>uint32_t</span> nr_istore_blocks <span style=color:#f92672>=</span> <span style=color:#a6e22e>idiv_ceil</span>(nr_inodes, SIMPLEFS_INODES_PER_BLOCK); <span style=color:#75715e>// 保存完所有inode需要的块数量
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>uint32_t</span> nr_ifree_blocks <span style=color:#f92672>=</span> <span style=color:#a6e22e>idiv_ceil</span>(nr_inodes, SIMPLEFS_BLOCK_SIZE <span style=color:#f92672>*</span> <span style=color:#ae81ff>8</span>); <span style=color:#75715e>// 标记完所有inode的空闲位图需要的块数量，因为位图的每个字节有8位，能标记8个inode，故一个块能标记总字节数*8个inode
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>uint32_t</span> nr_bfree_blocks <span style=color:#f92672>=</span> <span style=color:#a6e22e>idiv_ceil</span>(nr_blocks, SIMPLEFS_BLOCK_SIZE <span style=color:#f92672>*</span> <span style=color:#ae81ff>8</span>); <span style=color:#75715e>// 同上
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>uint32_t</span> nr_data_blocks <span style=color:#f92672>=</span>
+</span></span><span style=display:flex><span>        nr_blocks <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>-</span> nr_istore_blocks <span style=color:#f92672>-</span> nr_ifree_blocks <span style=color:#f92672>-</span> nr_bfree_blocks; <span style=color:#75715e>// 数据块的数目 = 总的块数目 - 超级块 - 多个inode信息块 - inode空闲位图 - 数据块空闲位图
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>memset</span>(sb, <span style=color:#ae81ff>0</span>, <span style=color:#66d9ef>sizeof</span>(<span style=color:#66d9ef>struct</span> superblock));
+</span></span><span style=display:flex><span>    sb<span style=color:#f92672>-&gt;</span>info <span style=color:#f92672>=</span> (<span style=color:#66d9ef>struct</span> simplefs_sb_info){ <span style=color:#75715e>// 填充超级块结构体, 该结构体在以后的mount时会被作为最关键的元数据被读取出来
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        .magic <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole32</span>(SIMPLEFS_MAGIC), <span style=color:#75715e>// 填充魔数，注意填充时使用的是32位的小端编码。
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        .nr_blocks <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole32</span>(nr_blocks),
+</span></span><span style=display:flex><span>        .nr_inodes <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole32</span>(nr_inodes),
+</span></span><span style=display:flex><span>        .nr_istore_blocks <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole32</span>(nr_istore_blocks),
+</span></span><span style=display:flex><span>        .nr_ifree_blocks <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole32</span>(nr_ifree_blocks),
+</span></span><span style=display:flex><span>        .nr_bfree_blocks <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole32</span>(nr_bfree_blocks),
+</span></span><span style=display:flex><span>        .nr_free_inodes <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole32</span>(nr_inodes <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>), <span style=color:#75715e>// -1是因为把编号为0的inode保留了，即文件系统根所占用的inode
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        .nr_free_blocks <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole32</span>(nr_data_blocks <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>), <span style=color:#75715e>// 原因同上，文件系统根必然是一个目录文件，故会占用一个数据块
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    };
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>write</span>(fd, sb, <span style=color:#66d9ef>sizeof</span>(<span style=color:#66d9ef>struct</span> superblock)); <span style=color:#75715e>// 把超级块的结构体数据写入到设备文件中
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> sb;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>小结：</p><ul><li>主要是根据设备容量，计算数据块的数量及对应所需的inode信息的条目数</li><li>再进一步计算得到inode信息、inode空闲位图和数据块空闲位图的占用块数，并确定文件系统的整体布局</li><li>填充SimpleFS超级块结构体，并写入到设备文件中的第1个块中</li></ul><h2 id=inodes信息块数据写入>inodes信息块数据写入</h2><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C data-lang=C><span style=display:flex><span><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>write_inode_store</span>(<span style=color:#66d9ef>int</span> fd, <span style=color:#66d9ef>struct</span> superblock <span style=color:#f92672>*</span>sb)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* Allocate a zeroed block for inode store */</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>block <span style=color:#f92672>=</span> <span style=color:#a6e22e>malloc</span>(SIMPLEFS_BLOCK_SIZE);
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>memset</span>(block, <span style=color:#ae81ff>0</span>, SIMPLEFS_BLOCK_SIZE);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* Root inode (inode 0) */</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> simplefs_inode <span style=color:#f92672>*</span>inode <span style=color:#f92672>=</span> (<span style=color:#66d9ef>struct</span> simplefs_inode <span style=color:#f92672>*</span>) block;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint32_t</span> first_data_block <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>+</span> <span style=color:#a6e22e>le32toh</span>(sb<span style=color:#f92672>-&gt;</span>info.nr_bfree_blocks) <span style=color:#f92672>+</span> <span style=color:#75715e>// 超级块占用1个块，其他区域从sb-&gt;info中读取
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>                                <span style=color:#a6e22e>le32toh</span>(sb<span style=color:#f92672>-&gt;</span>info.nr_ifree_blocks) <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span>                                <span style=color:#a6e22e>le32toh</span>(sb<span style=color:#f92672>-&gt;</span>info.nr_istore_blocks);
+</span></span><span style=display:flex><span>    inode<span style=color:#f92672>-&gt;</span>i_mode <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole32</span>(S_IFDIR <span style=color:#f92672>|</span> S_IRUSR <span style=color:#f92672>|</span> S_IRGRP <span style=color:#f92672>|</span> S_IROTH <span style=color:#f92672>|</span> S_IWUSR <span style=color:#f92672>|</span>
+</span></span><span style=display:flex><span>                            S_IWGRP <span style=color:#f92672>|</span> S_IXUSR <span style=color:#f92672>|</span> S_IXGRP <span style=color:#f92672>|</span> S_IXOTH);
+</span></span><span style=display:flex><span>    inode<span style=color:#f92672>-&gt;</span>i_uid <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    inode<span style=color:#f92672>-&gt;</span>i_gid <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    inode<span style=color:#f92672>-&gt;</span>i_size <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole32</span>(SIMPLEFS_BLOCK_SIZE);
+</span></span><span style=display:flex><span>    inode<span style=color:#f92672>-&gt;</span>i_ctime <span style=color:#f92672>=</span> inode<span style=color:#f92672>-&gt;</span>i_atime <span style=color:#f92672>=</span> inode<span style=color:#f92672>-&gt;</span>i_mtime <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole32</span>(<span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    inode<span style=color:#f92672>-&gt;</span>i_blocks <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole32</span>(<span style=color:#ae81ff>1</span>); <span style=color:#75715e>// 根inode占用1个数据块
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    inode<span style=color:#f92672>-&gt;</span>i_nlink <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole32</span>(<span style=color:#ae81ff>2</span>); <span style=color:#75715e>// 默认会有 . 与 .. 两个软链接
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    inode<span style=color:#f92672>-&gt;</span>dir_block <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole32</span>(first_data_block); <span style=color:#75715e>// 设置根inode的目录块的索引，即第几个数据块
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>write</span>(fd, block, SIMPLEFS_BLOCK_SIZE); <span style=color:#75715e>// 在第1个inode信息块中写入根inode的数据
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* Reset inode store blocks to zero */</span>
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>memset</span>(block, <span style=color:#ae81ff>0</span>, SIMPLEFS_BLOCK_SIZE);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint32_t</span> i;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (i <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>; i <span style=color:#f92672>&lt;</span> sb<span style=color:#f92672>-&gt;</span>info.nr_istore_blocks; i<span style=color:#f92672>++</span>) { <span style=color:#75715e>// 把剩余inode信息块置零
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>write</span>(fd, block, SIMPLEFS_BLOCK_SIZE);
+</span></span><span style=display:flex><span>        ...
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>end:
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>free</span>(block);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> ret;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>小结</p><ul><li>主要是向设备文件中写入第0号inode，即该文件系统根目录的元数据信息。</li></ul><h2 id=inode数据块空闲位图数据写入>inode/数据块空闲位图数据写入</h2><p>inode空闲位图的写入</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>write_ifree_blocks</span>(<span style=color:#66d9ef>int</span> fd, <span style=color:#66d9ef>struct</span> superblock <span style=color:#f92672>*</span>sb)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>block <span style=color:#f92672>=</span> <span style=color:#a6e22e>malloc</span>(SIMPLEFS_BLOCK_SIZE);
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint64_t</span> <span style=color:#f92672>*</span>ifree <span style=color:#f92672>=</span> (<span style=color:#66d9ef>uint64_t</span> <span style=color:#f92672>*</span>) block;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* Set all bits to 1 */</span>
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>memset</span>(ifree, <span style=color:#ae81ff>0xff</span>, SIMPLEFS_BLOCK_SIZE); <span style=color:#75715e>// 1表示空闲，0表示已使用
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* First ifree block, containing first used inode */</span>
+</span></span><span style=display:flex><span>    ifree[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole64</span>(<span style=color:#ae81ff>0xfffffffffffffffe</span>); <span style=color:#75715e>// 最低位为0，表示第0号inode已被使用
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>write</span>(fd, ifree, SIMPLEFS_BLOCK_SIZE);
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* All ifree blocks except the one containing 2 first inodes */</span>
+</span></span><span style=display:flex><span>    ifree[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> <span style=color:#ae81ff>0xffffffffffffffff</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint32_t</span> i;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (i <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#a6e22e>le32toh</span>(sb<span style=color:#f92672>-&gt;</span>info.nr_ifree_blocks); i<span style=color:#f92672>++</span>) { <span style=color:#75715e>//填充剩余的inode空闲位图块，全部置为1表示空闲
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>write</span>(fd, ifree, SIMPLEFS_BLOCK_SIZE);
+</span></span><span style=display:flex><span>        ...
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    ret <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>end:
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>free</span>(block);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> ret;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>数据块空闲位图的写入</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C data-lang=C><span style=display:flex><span><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>write_bfree_blocks</span>(<span style=color:#66d9ef>int</span> fd, <span style=color:#66d9ef>struct</span> superblock <span style=color:#f92672>*</span>sb)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint32_t</span> nr_used <span style=color:#f92672>=</span> <span style=color:#a6e22e>le32toh</span>(sb<span style=color:#f92672>-&gt;</span>info.nr_istore_blocks) <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span>                       <span style=color:#a6e22e>le32toh</span>(sb<span style=color:#f92672>-&gt;</span>info.nr_ifree_blocks) <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span>                       <span style=color:#a6e22e>le32toh</span>(sb<span style=color:#f92672>-&gt;</span>info.nr_bfree_blocks) <span style=color:#f92672>+</span> <span style=color:#ae81ff>2</span>; <span style=color:#75715e>// 2中包含1个超级块和1个根目录
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>block <span style=color:#f92672>=</span> <span style=color:#a6e22e>malloc</span>(SIMPLEFS_BLOCK_SIZE);
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint64_t</span> <span style=color:#f92672>*</span>bfree <span style=color:#f92672>=</span> (<span style=color:#66d9ef>uint64_t</span> <span style=color:#f92672>*</span>) block;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     * First blocks (incl. sb + istore + ifree + bfree + 1 used block)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     * we suppose it won&#39;t go further than the first block
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     */</span>
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>memset</span>(bfree, <span style=color:#ae81ff>0xff</span>, SIMPLEFS_BLOCK_SIZE);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint32_t</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (nr_used) {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>uint64_t</span> line <span style=color:#f92672>=</span> <span style=color:#ae81ff>0xffffffffffffffff</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>uint64_t</span> mask <span style=color:#f92672>=</span> <span style=color:#ae81ff>0x1</span>; mask; mask <span style=color:#f92672>&lt;&lt;=</span> <span style=color:#ae81ff>1</span>) { <span style=color:#75715e>// 个位为1的64位掩码，并不断左移
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>            line <span style=color:#f92672>&amp;=</span> <span style=color:#f92672>~</span>mask; <span style=color:#75715e>// 置当前掩码所在位置为0，即表示该数据块已使用
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>            nr_used<span style=color:#f92672>--</span>;
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>nr_used)
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (line <span style=color:#f92672>==</span> (<span style=color:#66d9ef>uint64_t</span>)<span style=color:#ae81ff>0x00</span>) <span style=color:#75715e>// break if this line is used up?
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>                <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        bfree[i] <span style=color:#f92672>=</span> <span style=color:#a6e22e>htole64</span>(line); <span style=color:#75715e>// 以64位长度为单位，不断更新块内的位图信息，直到所有已使用数据块被都被标记
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        i<span style=color:#f92672>++</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>write</span>(fd, bfree, SIMPLEFS_BLOCK_SIZE); <span style=color:#75715e>// 写入第1个数据块空闲位图到设备上
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* other blocks */</span>
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>memset</span>(bfree, <span style=color:#ae81ff>0xff</span>, SIMPLEFS_BLOCK_SIZE);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (i <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#a6e22e>le32toh</span>(sb<span style=color:#f92672>-&gt;</span>info.nr_bfree_blocks); i<span style=color:#f92672>++</span>) { <span style=color:#75715e>// 写入1到剩余的数据块空闲位图，表示都未使用
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>write</span>(fd, bfree, SIMPLEFS_BLOCK_SIZE);
+</span></span><span style=display:flex><span>        ...
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    ret <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>free</span>(block);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> ret;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>小结:</p><ul><li>根据sb->info中的inode及块的使用统计，分别写入位图到inode及数据块的空闲位图块中。</li></ul><h2 id=数据块数据写入>数据块数据写入</h2><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>write_data_blocks</span>(<span style=color:#66d9ef>int</span> fd, <span style=color:#66d9ef>struct</span> superblock <span style=color:#f92672>*</span>sb)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* FIXME: unimplemented */</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>当前的实现是没有做任何事情直接返回的。</p><h2 id=小结>小结</h2><ul><li>SimpleFS的格式化，主要是根据设备容量计算出文件系统的布局</li><li>根据布局，把超级块结构体写入超级块所在块中(第1号块)</li><li>根据超级块的定义，把inode信息块、inode空闲位图、数据块空闲位图写入相应的数据</li><li>格式化中写入的结构体与位图数据，可以在后面梳理挂载功能的时候，进行进一步理解</li></ul><ul class=pa0><li class="list di"><a href=/tags/simplefs/ class="link f5 grow no-underline br-pill ba ph3 pv2 mb2 dib black sans-serif">simplefs</a></li><li class="list di"><a href=/tags/fs/ class="link f5 grow no-underline br-pill ba ph3 pv2 mb2 dib black sans-serif">fs</a></li></ul><div class="mt6 instapaper_ignoref"></div></div><aside class="w-30-l mt6-l"><div class="bg-light-gray pa3 nested-list-reset nested-copy-line-height nested-links"><p class="f5 b mb3">Related</p><ul class="pa0 list"><li class=mb2><a href=/post/simplefs_compile/>SimpleFS文件系统1: 初次使用</a></li></ul></div></aside></article></main><footer class="bg-black bottom-0 w-100 pa3" role=contentinfo><div class="flex justify-between"><a class="f4 fw4 hover-white no-underline white-70 dn dib-ns pv2 ph3" href=https://hawkhe.github.io/>&copy; Hawk's Blog 2023</a><div><div class=ananke-socials></div></div></div></footer></body></html>
