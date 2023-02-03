@@ -1,10 +1,9 @@
 ---
-title: "Librbd调试环境搭建"
+title: "Librbd学习1: 调试环境搭建"
 date: 2022-07-22T04:42:07Z
+tags: ["librbd"]
 draft: false
 ---
-
-# Librbd调试环境搭建
 
 
 ## 编译Ceph
