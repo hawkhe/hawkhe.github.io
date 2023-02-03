@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Cephs on My New Hugo Site</title><link>http://example.org/ceph/</link><description>Recent content in Cephs on My New Hugo Site</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Fri, 22 Jul 2022 04:42:07 +0000</lastBuildDate><atom:link href="http://example.org/ceph/index.xml" rel="self" type="application/rss+xml"/><item><title>Librbd调试环境搭建</title><link>http://example.org/ceph/librbd%E8%B0%83%E8%AF%95%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/</link><pubDate>Fri, 22 Jul 2022 04:42:07 +0000</pubDate><guid>http://example.org/ceph/librbd%E8%B0%83%E8%AF%95%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/</guid><description>Librbd调试环境搭建 编译Ceph 编译环境
-root@haosheng-dev2:~# cat /etc/lsb-release DISTRIB_ID=Ubuntu DISTRIB_RELEASE=20.04 DISTRIB_CODENAME=focal DISTRIB_DESCRIPTION=&amp;#34;Ubuntu 20.04 LTS&amp;#34; 下载Ceph源码
-root@haosheng-dev2:/work# git clone --branch v15.2.16 https://github.com/ceph/ceph.git 下载源码依赖
-root@haosheng-dev2:/work# cd ceph root@haosheng-dev2:/work/ceph# git submodule update --init --recursive 安装依赖包
-root@haosheng-dev2:/work/ceph# ./install-deps.sh 因为后面需要使用gdb调试程序，故需要以debug模式进行编译
-配置debug相关参数，并执行do_cmake.sh
-root@haosheng-dev2:/work/ceph# ARGS=&amp;#34;-DCMAKE_C_FLAGS=-O0 -g3 -gdwarf-4 -DCMAKE_CXX_FLAGS=-O0 -g3 -gdwarf-4&amp;#34; ./do_cmake.sh -DWITH_MGR_DASHBOARD_FRONTEND=off cmake添加的参数的解释:
-CMAKE_C_FLAGS=“-O0 -g3 -gdwarf-4” ： c 语言编译配置 CMAKE_CXX_FLAGS=“-O0 -g3 -gdwarf-4” ：c++ 编译配置 -O0 : 关闭编译器的优化，如果没有，使用GDB追踪程序时，大多数变量被优化,无法显示, 生产环境必须关掉 -g3 : 意味着会产生大量的调试信息 -gdwarf-4 : dwarf 是一种调试格式，dwarf-4 版本为4 执行编译
-root@haosheng-dev2:/work/ceph# cd build root@haosheng-dev2:/work/ceph/build# make -j4 查看编译后的库文件</description></item></channel></rss>
