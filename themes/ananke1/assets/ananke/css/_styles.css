@@ -18,3 +18,7 @@
 .nested-links a{
   overflow-wrap: break-word;
 }
+
+.article-container {
+  max-width: none;
+}
