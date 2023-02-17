@@ -8,6 +8,8 @@ draft: false
 
 ## 编译Ceph
 
+首先我们搭建一个可以编译Ceph RBD的环境出来<!--more-->
+
 编译环境
 
 ```bash

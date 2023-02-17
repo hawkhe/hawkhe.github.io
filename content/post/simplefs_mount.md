@@ -9,7 +9,7 @@ draft: false
 
 ## 内核模块加载
 
-SimpleFS的核心功能都在内核态实现，使用前需要保证该模块已经加载到内核之中。
+SimpleFS的核心功能都在内核态实现，使用前需要保证该模块已经加载到内核之中。<!--more-->
 
 其入口代码实现在fs.c文件中，加载SimpleFS内核模块时，会调用到module_init函数注册的simplefs_init函数上。
 

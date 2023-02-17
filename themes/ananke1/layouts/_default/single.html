@@ -29,10 +29,11 @@
         </strong>
       </p>
       {{ end }}
-      {{/* Hugo uses Go's date formatting is set by example. Here are two formats */}}
+      {{/* Hugo uses Go date formatting is set by example. Here are two formats */}}
       {{ if not .Date.IsZero }}
       <time class="f6 mv4 dib tracked" {{ printf `datetime="%s"` (.Date.Format "2006-01-02T15:04:05Z07:00") | safeHTMLAttr }}>
         {{- .Date | time.Format (default "January 2, 2006" .Site.Params.date_format) -}}
+        {{- partial "tags.html" . -}}
       </time>
       {{end}}
 
@@ -49,7 +50,8 @@
     </header>
     <div class="nested-copy-line-height lh-copy {{ $.Param "post_content_classes"  | default "serif"}} f4 nested-links {{ $.Param "text_color" | default "mid-gray" }} {{ cond (eq $.Site.Language.LanguageDirection "rtl") "pl4-l" "pr4-l" }} w-100">
       {{- .Content -}}
-      {{- partial "tags.html" . -}}
+      <!-- {{- partial "tags.html" . -}} -->
+      {{- partial "menu-contextual.html" . -}}
       <div class="mt6 instapaper_ignoref">
       {{ if .Site.DisqusShortname }}
         {{ template "_internal/disqus.html" . }}
@@ -60,9 +62,9 @@
       </div>
     </div>
 
-    <aside class="w-30-l mt6-l">
+    <!-- <aside class="w-20-l mt6-l">
       {{- partial "menu-contextual.html" . -}}
-    </aside>
+    </aside> -->
 
   </article>
 {{ end }}

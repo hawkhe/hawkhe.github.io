@@ -9,7 +9,7 @@ draft: false
 
 ## 格式化程序mkfs.c
 
-格式化的功能在源码中的mkfs.c中实现，其main函数中的主要环节已经写好了注释:
+格式化的功能在源码中的mkfs.c中实现，其main函数中的主要环节已经写好了注释:<!--more-->
 
 ```c
 int main(int argc, char **argv)

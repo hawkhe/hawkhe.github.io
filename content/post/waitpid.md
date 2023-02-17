@@ -1,12 +1,12 @@
 ---
-title: "使用waitpid清理僵尸进程"
+title: "使用waitpid收割僵尸进程"
 date: 2023-02-17T02:40:10Z
 draft: false
 # toc: true
 tags: ["syscall"]
 ---
 
-最近，发现公司某个agent进程运行时，会产生一些僵尸子进程的现象
+最近，发现公司某个agent进程运行时，会产生一些僵尸子进程的现象<!--more-->
 
 使用ps命令进行查找，这些僵尸进程都来自于同一个父进程36791
 
