@@ -1,0 +1,258 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta http-equiv=x-ua-compatible content="IE=edge,chrome=1"><title>使用waitpid清理僵尸进程 | Hawk's Blog</title><meta name=viewport content="width=device-width,minimum-scale=1"><meta name=description content="最近，发现公司某个agent进程运行时，会产生一些僵尸子进程的现象
+使用ps命令进行查找，这些僵尸进程都来自于同一个父进程36791
+[root@node-1 ~]# ps -ef | grep &#34;[d]efunct&#34; root 37185 36791 0 11:50 ? 00:00:00 [sudo] <defunct> root 56231 36791 0 13:50 ? 00:00:00 [sudo] <defunct> root 56255 36791 0 13:50 ? 00:00:00 [sudo] <defunct> root 56359 36791 0 13:50 ? 00:00:00 [sudo] <defunct> 使用top对它们进行观察，发现并没有占用内存和CPU，也没有被调度到
+top - 17:41:38 up 14 days, 20:56, 1 user, load average: 24.34, 37.25, 43.21 Tasks: 4 total, 0 running, 0 sleeping, 0 stopped, 4 zombie %Cpu(s): 8."><meta name=generator content="Hugo 0.110.0"><meta name=robots content="noindex, nofollow"><link rel=stylesheet href=/ananke/css/main.min.css><meta property="og:title" content="使用waitpid清理僵尸进程"><meta property="og:description" content="最近，发现公司某个agent进程运行时，会产生一些僵尸子进程的现象
+使用ps命令进行查找，这些僵尸进程都来自于同一个父进程36791
+[root@node-1 ~]# ps -ef | grep &#34;[d]efunct&#34; root 37185 36791 0 11:50 ? 00:00:00 [sudo] <defunct> root 56231 36791 0 13:50 ? 00:00:00 [sudo] <defunct> root 56255 36791 0 13:50 ? 00:00:00 [sudo] <defunct> root 56359 36791 0 13:50 ? 00:00:00 [sudo] <defunct> 使用top对它们进行观察，发现并没有占用内存和CPU，也没有被调度到
+top - 17:41:38 up 14 days, 20:56, 1 user, load average: 24.34, 37.25, 43.21 Tasks: 4 total, 0 running, 0 sleeping, 0 stopped, 4 zombie %Cpu(s): 8."><meta property="og:type" content="article"><meta property="og:url" content="https://hawkhe.github.io/post/waitpid/"><meta property="article:section" content="post"><meta property="article:published_time" content="2023-02-17T02:40:10+00:00"><meta property="article:modified_time" content="2023-02-17T02:40:10+00:00"><meta itemprop=name content="使用waitpid清理僵尸进程"><meta itemprop=description content="最近，发现公司某个agent进程运行时，会产生一些僵尸子进程的现象
+使用ps命令进行查找，这些僵尸进程都来自于同一个父进程36791
+[root@node-1 ~]# ps -ef | grep &#34;[d]efunct&#34; root 37185 36791 0 11:50 ? 00:00:00 [sudo] <defunct> root 56231 36791 0 13:50 ? 00:00:00 [sudo] <defunct> root 56255 36791 0 13:50 ? 00:00:00 [sudo] <defunct> root 56359 36791 0 13:50 ? 00:00:00 [sudo] <defunct> 使用top对它们进行观察，发现并没有占用内存和CPU，也没有被调度到
+top - 17:41:38 up 14 days, 20:56, 1 user, load average: 24.34, 37.25, 43.21 Tasks: 4 total, 0 running, 0 sleeping, 0 stopped, 4 zombie %Cpu(s): 8."><meta itemprop=datePublished content="2023-02-17T02:40:10+00:00"><meta itemprop=dateModified content="2023-02-17T02:40:10+00:00"><meta itemprop=wordCount content="967"><meta itemprop=keywords content="syscall,"><meta name=twitter:card content="summary"><meta name=twitter:title content="使用waitpid清理僵尸进程"><meta name=twitter:description content="最近，发现公司某个agent进程运行时，会产生一些僵尸子进程的现象
+使用ps命令进行查找，这些僵尸进程都来自于同一个父进程36791
+[root@node-1 ~]# ps -ef | grep &#34;[d]efunct&#34; root 37185 36791 0 11:50 ? 00:00:00 [sudo] <defunct> root 56231 36791 0 13:50 ? 00:00:00 [sudo] <defunct> root 56255 36791 0 13:50 ? 00:00:00 [sudo] <defunct> root 56359 36791 0 13:50 ? 00:00:00 [sudo] <defunct> 使用top对它们进行观察，发现并没有占用内存和CPU，也没有被调度到
+top - 17:41:38 up 14 days, 20:56, 1 user, load average: 24.34, 37.25, 43.21 Tasks: 4 total, 0 running, 0 sleeping, 0 stopped, 4 zombie %Cpu(s): 8."></head><body class="ma0 avenir bg-near-white"><header><div class=bg-black><nav class="pv3 ph3 ph4-ns" role=navigation><div class="flex-l justify-between items-center center"><a href=/ class="f3 fw2 hover-white no-underline white-90 dib">Hawk's Blog</a><div class="flex-l items-center"><ul class="pl0 mr3"><li class="list f5 f4-ns fw4 dib pr3"><a class="hover-white no-underline white-90" href=/post/ title="Articles page">Articles</a></li></ul><div class=ananke-socials></div></div></div></nav></div></header><main class=pb7 role=main><article class="flex-l flex-wrap justify-between mw8 center ph3"><header class="mt4 w-100"><aside class="instapaper_ignoref b helvetica tracked">ARTICLES</aside><div id=sharing class="mt3 ananke-socials"></div><h1 class="f1 athelas mt3 mb1">使用waitpid清理僵尸进程</h1><time class="f6 mv4 dib tracked" datetime=2023-02-17T02:40:10Z>February 17, 2023</time></header><div class="nested-copy-line-height lh-copy serif f4 nested-links mid-gray pr4-l w-two-thirds-l"><p>最近，发现公司某个agent进程运行时，会产生一些僵尸子进程的现象</p><p>使用ps命令进行查找，这些僵尸进程都来自于同一个父进程36791</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash><span style=display:flex><span><span style=color:#f92672>[</span>root@node-1 ~<span style=color:#f92672>]</span><span style=color:#75715e># ps -ef | grep &#34;[d]efunct&#34;</span>
+</span></span><span style=display:flex><span>root     <span style=color:#ae81ff>37185</span> <span style=color:#ae81ff>36791</span>  <span style=color:#ae81ff>0</span> 11:50 ?        00:00:00 <span style=color:#f92672>[</span>sudo<span style=color:#f92672>]</span> &lt;defunct&gt;
+</span></span><span style=display:flex><span>root     <span style=color:#ae81ff>56231</span> <span style=color:#ae81ff>36791</span>  <span style=color:#ae81ff>0</span> 13:50 ?        00:00:00 <span style=color:#f92672>[</span>sudo<span style=color:#f92672>]</span> &lt;defunct&gt;
+</span></span><span style=display:flex><span>root     <span style=color:#ae81ff>56255</span> <span style=color:#ae81ff>36791</span>  <span style=color:#ae81ff>0</span> 13:50 ?        00:00:00 <span style=color:#f92672>[</span>sudo<span style=color:#f92672>]</span> &lt;defunct&gt;
+</span></span><span style=display:flex><span>root     <span style=color:#ae81ff>56359</span> <span style=color:#ae81ff>36791</span>  <span style=color:#ae81ff>0</span> 13:50 ?        00:00:00 <span style=color:#f92672>[</span>sudo<span style=color:#f92672>]</span> &lt;defunct&gt;
+</span></span></code></pre></div><p>使用top对它们进行观察，发现并没有占用内存和CPU，也没有被调度到</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash><span style=display:flex><span>top - 17:41:38 up <span style=color:#ae81ff>14</span> days, 20:56,  <span style=color:#ae81ff>1</span> user,  load average: 24.34, 37.25, 43.21
+</span></span><span style=display:flex><span>Tasks:   <span style=color:#ae81ff>4</span> total,   <span style=color:#ae81ff>0</span> running,   <span style=color:#ae81ff>0</span> sleeping,   <span style=color:#ae81ff>0</span> stopped,   <span style=color:#ae81ff>4</span> zombie
+</span></span><span style=display:flex><span>%Cpu<span style=color:#f92672>(</span>s<span style=color:#f92672>)</span>:  8.2 us,  4.2 sy,  0.0 ni, 86.6 id,  0.0 wa,  0.5 hi,  0.5 si,  0.0 st
+</span></span><span style=display:flex><span>MiB Mem : 257515.5 total,  80404.6 free, 169038.2 used,   8072.7 buff/cache
+</span></span><span style=display:flex><span>MiB Swap:      0.0 total,      0.0 free,      0.0 used.  82702.2 avail Mem
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+</span></span><span style=display:flex><span><span style=color:#ae81ff>37185</span> root      <span style=color:#ae81ff>20</span>   <span style=color:#ae81ff>0</span>       <span style=color:#ae81ff>0</span>      <span style=color:#ae81ff>0</span>      <span style=color:#ae81ff>0</span> Z   0.0   0.0   0:00.06 sudo
+</span></span><span style=display:flex><span><span style=color:#ae81ff>56231</span> root      <span style=color:#ae81ff>20</span>   <span style=color:#ae81ff>0</span>       <span style=color:#ae81ff>0</span>      <span style=color:#ae81ff>0</span>      <span style=color:#ae81ff>0</span> Z   0.0   0.0   0:00.07 sudo
+</span></span><span style=display:flex><span><span style=color:#ae81ff>56255</span> root      <span style=color:#ae81ff>20</span>   <span style=color:#ae81ff>0</span>       <span style=color:#ae81ff>0</span>      <span style=color:#ae81ff>0</span>      <span style=color:#ae81ff>0</span> Z   0.0   0.0   0:00.07 sudo
+</span></span><span style=display:flex><span><span style=color:#ae81ff>56359</span> root      <span style=color:#ae81ff>20</span>   <span style=color:#ae81ff>0</span>       <span style=color:#ae81ff>0</span>      <span style=color:#ae81ff>0</span>      <span style=color:#ae81ff>0</span> Z   0.0   0.0   0:00.08 sudo
+</span></span></code></pre></div><p>查了下资料，虽然一般来说，僵尸进程不影响系统运行，但是强迫症的我还是准备一探究竟。</p><h2 id=验证>验证</h2><p><em>在<a href=https://zh.wikipedia.org/wiki/%E7%B1%BBUNIX%E7%B3%BB%E7%BB%9F>类UNIX系统</a>中，<strong>僵尸进程</strong>是指完成执行（通过<code>exit</code><a href=https://zh.wikipedia.org/wiki/%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8>系统调用</a>，或运行时发生<a href=https://zh.wikipedia.org/wiki/%E8%87%B4%E5%91%BD%E9%94%99%E8%AF%AF>致命错误</a>或收到终止<a href=https://zh.wikipedia.org/wiki/%E4%BF%A1%E5%8F%B7_(%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%A7%91%E5%AD%A6)>信号</a>所致），但在操作系统的进程表中仍然存在其<a href=https://zh.wikipedia.org/wiki/%E8%BF%9B%E7%A8%8B%E6%8E%A7%E5%88%B6%E5%9D%97>进程控制块</a>，处于"<a href="https://zh.wikipedia.org/w/index.php?title=%E7%BB%88%E6%AD%A2%E7%8A%B6%E6%80%81&action=edit&redlink=1">终止状态</a>&ldquo;的进程。这发生于<a href=https://zh.wikipedia.org/wiki/%E5%AD%90%E8%BF%9B%E7%A8%8B>子进程</a>需要保留表项以允许其<a href=https://zh.wikipedia.org/wiki/%E7%88%B6%E8%BF%9B%E7%A8%8B>父进程</a>读取子进程的退出状态 &mdash; 维基百科</em></p><p>以下是个例子:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;iostream&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/wait.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>using</span> <span style=color:#66d9ef>namespace</span> std;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    pid_t pid <span style=color:#f92672>=</span> fork(); <span style=color:#75715e>// 调用fork()生成子进程
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34;Error creating&#34;</span>;
+</span></span><span style=display:flex><span>        exit(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>// 如果是子进程
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    {
+</span></span><span style=display:flex><span>        exit(<span style=color:#ae81ff>1</span>); <span style=color:#75715e>// 直接退出，造成zombie状态
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#75715e>// 如果是父进程
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> a;
+</span></span><span style=display:flex><span>        cin <span style=color:#f92672>&gt;&gt;</span> a; <span style=color:#75715e>// 造成等待
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>运行后，子进程成为僵尸进程</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash><span style=display:flex><span>root@hao6:~# ps aux | grep demo
+</span></span><span style=display:flex><span>root       <span style=color:#ae81ff>64497</span>  0.0  0.0   <span style=color:#ae81ff>6048</span>  <span style=color:#ae81ff>1888</span> pts/1    S+   10:19   0:00 ./demo
+</span></span><span style=display:flex><span>root       <span style=color:#ae81ff>64498</span>  0.0  0.0      <span style=color:#ae81ff>0</span>     <span style=color:#ae81ff>0</span> pts/1    Z+   10:19   0:00 <span style=color:#f92672>[</span>demo<span style=color:#f92672>]</span> &lt;defunct&gt;
+</span></span><span style=display:flex><span>root       <span style=color:#ae81ff>64520</span>  0.0  0.0   <span style=color:#ae81ff>7004</span>  <span style=color:#ae81ff>2112</span> pts/3    S+   10:19   0:00 grep --color<span style=color:#f92672>=</span>auto demo
+</span></span></code></pre></div><p>我们对上面的示例代码进行改造，父进程中使用waitpid()对子进程进行收割(reap)</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>else</span> <span style=color:#75715e>// 如果是父进程
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    {
+</span></span><span style=display:flex><span>        waitpid(pid, <span style=color:#66d9ef>nullptr</span>, <span style=color:#ae81ff>0</span>); <span style=color:#75715e>// 等待子进程退出
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        <span style=color:#66d9ef>int</span> a;
+</span></span><span style=display:flex><span>        cin <span style=color:#f92672>&gt;&gt;</span> a;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>运行后，子进程正常退出</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash><span style=display:flex><span>root@hao6:~# ps aux | grep demo
+</span></span><span style=display:flex><span>root       <span style=color:#ae81ff>64577</span>  0.0  0.0   <span style=color:#ae81ff>6048</span>  <span style=color:#ae81ff>1924</span> pts/1    S+   10:31   0:00 ./demo
+</span></span><span style=display:flex><span>root       <span style=color:#ae81ff>64616</span>  0.0  0.0   <span style=color:#ae81ff>7004</span>  <span style=color:#ae81ff>2128</span> pts/3    S+   10:32   0:00 grep --color<span style=color:#f92672>=</span>auto demo
+</span></span></code></pre></div><h2 id=一探究竟>一探究竟</h2><p><em>一旦退出态通过<code>wait</code><a href=https://zh.wikipedia.org/wiki/%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8>系统调用</a>读取，僵尸进程条目就从进程表中删除，称之为"回收&rdquo;（reaped）。正常情况下，进程直接被其父进程<code>wait</code>并由系统回收。 &mdash; 维基百科</em></p><p>那么问题来了，到底是如何触发父进程回收子进程的呢？</p><p>sys/wait.h中有着waitpid函数的定义</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C data-lang=C><span style=display:flex><span><span style=color:#66d9ef>extern</span> __pid_t <span style=color:#a6e22e>waitpid</span> (__pid_t __pid, <span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>__stat_loc, <span style=color:#66d9ef>int</span> __options);
+</span></span></code></pre></div><p>我们使用strace工具看一下，waitpid最终指向了哪个系统调用</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash><span style=display:flex><span>root@hao6:~# strace ./demo
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>wait4<span style=color:#f92672>(</span>64730, NULL, 0, NULL<span style=color:#f92672>)</span>             <span style=color:#f92672>=</span> <span style=color:#ae81ff>64730</span>
+</span></span><span style=display:flex><span>--- SIGCHLD <span style=color:#f92672>{</span>si_signo<span style=color:#f92672>=</span>SIGCHLD, si_code<span style=color:#f92672>=</span>CLD_EXITED, si_pid<span style=color:#f92672>=</span>64730, si_uid<span style=color:#f92672>=</span>0, si_status<span style=color:#f92672>=</span>1, si_utime<span style=color:#f92672>=</span>0, si_stime<span style=color:#f92672>=</span>0<span style=color:#f92672>}</span> ---
+</span></span><span style=display:flex><span>...
+</span></span></code></pre></div><p>根据关键字进行查找，发现程序执行了wait4这个系统调用。在内核源码中，寻找wait4函数，我们来一探究竟。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash><span style=display:flex><span>root@hao6:/work/linux-5.15.94# grep -nr <span style=color:#e6db74>&#39;SYSCALL_DEFINE&#39;</span>| grep <span style=color:#e6db74>&#39;wait4&#39;</span>
+</span></span><span style=display:flex><span>arch/alpha/kernel/osf_sys.c:1111:SYSCALL_DEFINE4<span style=color:#f92672>(</span>osf_wait4, pid_t, pid, int __user *, ustatus, int, options,
+</span></span><span style=display:flex><span>kernel/exit.c:1773:SYSCALL_DEFINE4<span style=color:#f92672>(</span>wait4, pid_t, upid, int __user *, stat_addr,
+</span></span><span style=display:flex><span>kernel/exit.c:1800:COMPAT_SYSCALL_DEFINE4<span style=color:#f92672>(</span>wait4,
+</span></span></code></pre></div><p>定义在kernel/exit.c的1773行，主要调用了kernel_wait4()函数</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#a6e22e>SYSCALL_DEFINE4</span>(wait4, <span style=color:#66d9ef>pid_t</span>, upid, <span style=color:#66d9ef>int</span> __user <span style=color:#f92672>*</span>, stat_addr,
+</span></span><span style=display:flex><span>		<span style=color:#66d9ef>int</span>, options, <span style=color:#66d9ef>struct</span> rusage __user <span style=color:#f92672>*</span>, ru)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>struct</span> rusage r;
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>long</span> err <span style=color:#f92672>=</span> <span style=color:#a6e22e>kernel_wait4</span>(upid, stat_addr, options, ru <span style=color:#f92672>?</span> <span style=color:#f92672>&amp;</span>r : NULL);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>if</span> (err <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>		<span style=color:#66d9ef>if</span> (ru <span style=color:#f92672>&amp;&amp;</span> <span style=color:#a6e22e>copy_to_user</span>(ru, <span style=color:#f92672>&amp;</span>r, <span style=color:#66d9ef>sizeof</span>(<span style=color:#66d9ef>struct</span> rusage)))
+</span></span><span style=display:flex><span>			<span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span>EFAULT;
+</span></span><span style=display:flex><span>	}
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>return</span> err;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>kernel_wait4()函数中，根据pid传入的大小进行了判断处理，对wait_opts进行填充，再调用了do_wait()函数</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>long</span> <span style=color:#a6e22e>kernel_wait4</span>(<span style=color:#66d9ef>pid_t</span> upid, <span style=color:#66d9ef>int</span> __user <span style=color:#f92672>*</span>stat_addr, <span style=color:#66d9ef>int</span> options,
+</span></span><span style=display:flex><span>		  <span style=color:#66d9ef>struct</span> rusage <span style=color:#f92672>*</span>ru)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>struct</span> wait_opts wo;
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>struct</span> pid <span style=color:#f92672>*</span>pid <span style=color:#f92672>=</span> NULL;
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>enum</span> pid_type type;
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>long</span> ret;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>if</span> (options <span style=color:#f92672>&amp;</span> <span style=color:#f92672>~</span>(WNOHANG<span style=color:#f92672>|</span>WUNTRACED<span style=color:#f92672>|</span>WCONTINUED<span style=color:#f92672>|</span>
+</span></span><span style=display:flex><span>			__WNOTHREAD<span style=color:#f92672>|</span>__WCLONE<span style=color:#f92672>|</span>__WALL))
+</span></span><span style=display:flex><span>		<span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span>EINVAL;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	<span style=color:#75715e>/* -INT_MIN is not defined */</span>
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>if</span> (upid <span style=color:#f92672>==</span> INT_MIN)
+</span></span><span style=display:flex><span>		<span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span>ESRCH;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>if</span> (upid <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>		type <span style=color:#f92672>=</span> PIDTYPE_MAX;
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (upid <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>		type <span style=color:#f92672>=</span> PIDTYPE_PGID;
+</span></span><span style=display:flex><span>		pid <span style=color:#f92672>=</span> <span style=color:#a6e22e>find_get_pid</span>(<span style=color:#f92672>-</span>upid);
+</span></span><span style=display:flex><span>	} <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (upid <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>		type <span style=color:#f92672>=</span> PIDTYPE_PGID;
+</span></span><span style=display:flex><span>		pid <span style=color:#f92672>=</span> <span style=color:#a6e22e>get_task_pid</span>(current, PIDTYPE_PGID);
+</span></span><span style=display:flex><span>	} <span style=color:#66d9ef>else</span> <span style=color:#75715e>/* upid &gt; 0 */</span> { <span style=color:#75715e>// 我们demo程序指定了子进程的PID，会走到这个分支
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>		type <span style=color:#f92672>=</span> PIDTYPE_PID; <span style=color:#75715e>// 设置类型
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>		pid <span style=color:#f92672>=</span> <span style=color:#a6e22e>find_get_pid</span>(upid); <span style=color:#75715e>// 获取指向pid类型的结构体的指针
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>	}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	wo.wo_type	<span style=color:#f92672>=</span> type;
+</span></span><span style=display:flex><span>	wo.wo_pid	<span style=color:#f92672>=</span> pid;
+</span></span><span style=display:flex><span>	wo.wo_flags	<span style=color:#f92672>=</span> options <span style=color:#f92672>|</span> WEXITED;
+</span></span><span style=display:flex><span>	wo.wo_info	<span style=color:#f92672>=</span> NULL;
+</span></span><span style=display:flex><span>	wo.wo_stat	<span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>	wo.wo_rusage	<span style=color:#f92672>=</span> ru;
+</span></span><span style=display:flex><span>	ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>do_wait</span>(<span style=color:#f92672>&amp;</span>wo);
+</span></span><span style=display:flex><span>	<span style=color:#a6e22e>put_pid</span>(pid);
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span> <span style=color:#f92672>&amp;&amp;</span> stat_addr <span style=color:#f92672>&amp;&amp;</span> <span style=color:#a6e22e>put_user</span>(wo.wo_stat, stat_addr))
+</span></span><span style=display:flex><span>		ret <span style=color:#f92672>=</span> <span style=color:#f92672>-</span>EFAULT;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>return</span> ret;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>do_wait()函数的实现，我们这个示例中，最终会调用到do_wait_pid()函数上</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C data-lang=C><span style=display:flex><span><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>long</span> <span style=color:#a6e22e>do_wait</span>(<span style=color:#66d9ef>struct</span> wait_opts <span style=color:#f92672>*</span>wo)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>int</span> retval;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	<span style=color:#a6e22e>trace_sched_process_wait</span>(wo<span style=color:#f92672>-&gt;</span>wo_pid);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	<span style=color:#a6e22e>init_waitqueue_func_entry</span>(<span style=color:#f92672>&amp;</span>wo<span style=color:#f92672>-&gt;</span>child_wait, child_wait_callback);
+</span></span><span style=display:flex><span>	wo<span style=color:#f92672>-&gt;</span>child_wait.private <span style=color:#f92672>=</span> current;
+</span></span><span style=display:flex><span>	<span style=color:#a6e22e>add_wait_queue</span>(<span style=color:#f92672>&amp;</span>current<span style=color:#f92672>-&gt;</span>signal<span style=color:#f92672>-&gt;</span>wait_chldexit, <span style=color:#f92672>&amp;</span>wo<span style=color:#f92672>-&gt;</span>child_wait);
+</span></span><span style=display:flex><span>repeat:
+</span></span><span style=display:flex><span>	<span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>	 * If there is nothing that can match our criteria, just get out.
+</span></span></span><span style=display:flex><span><span style=color:#75715e>	 * We will clear -&gt;notask_error to zero if we see any child that
+</span></span></span><span style=display:flex><span><span style=color:#75715e>	 * might later match our criteria, even if we are not able to reap
+</span></span></span><span style=display:flex><span><span style=color:#75715e>	 * it yet.
+</span></span></span><span style=display:flex><span><span style=color:#75715e>	 */</span>
+</span></span><span style=display:flex><span>	wo<span style=color:#f92672>-&gt;</span>notask_error <span style=color:#f92672>=</span> <span style=color:#f92672>-</span>ECHILD;
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>if</span> ((wo<span style=color:#f92672>-&gt;</span>wo_type <span style=color:#f92672>&lt;</span> PIDTYPE_MAX) <span style=color:#f92672>&amp;&amp;</span>
+</span></span><span style=display:flex><span>	   (<span style=color:#f92672>!</span>wo<span style=color:#f92672>-&gt;</span>wo_pid <span style=color:#f92672>||</span> <span style=color:#f92672>!</span><span style=color:#a6e22e>pid_has_task</span>(wo<span style=color:#f92672>-&gt;</span>wo_pid, wo<span style=color:#f92672>-&gt;</span>wo_type)))
+</span></span><span style=display:flex><span>		<span style=color:#66d9ef>goto</span> notask;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	<span style=color:#a6e22e>set_current_state</span>(TASK_INTERRUPTIBLE);
+</span></span><span style=display:flex><span>	<span style=color:#a6e22e>read_lock</span>(<span style=color:#f92672>&amp;</span>tasklist_lock);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>if</span> (wo<span style=color:#f92672>-&gt;</span>wo_type <span style=color:#f92672>==</span> PIDTYPE_PID) { <span style=color:#75715e>// 上层函数置wo_type为PIDTYPE_PID，故会走到这个分支
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>		retval <span style=color:#f92672>=</span> <span style=color:#a6e22e>do_wait_pid</span>(wo);
+</span></span><span style=display:flex><span>		<span style=color:#66d9ef>if</span> (retval)
+</span></span><span style=display:flex><span>			<span style=color:#66d9ef>goto</span> end;
+</span></span><span style=display:flex><span>	} <span style=color:#66d9ef>else</span> {
+</span></span><span style=display:flex><span>		<span style=color:#66d9ef>struct</span> task_struct <span style=color:#f92672>*</span>tsk <span style=color:#f92672>=</span> current;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>		<span style=color:#66d9ef>do</span> {
+</span></span><span style=display:flex><span>			retval <span style=color:#f92672>=</span> <span style=color:#a6e22e>do_wait_thread</span>(wo, tsk);
+</span></span><span style=display:flex><span>			<span style=color:#66d9ef>if</span> (retval)
+</span></span><span style=display:flex><span>				<span style=color:#66d9ef>goto</span> end;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>			retval <span style=color:#f92672>=</span> <span style=color:#a6e22e>ptrace_do_wait</span>(wo, tsk);
+</span></span><span style=display:flex><span>			<span style=color:#66d9ef>if</span> (retval)
+</span></span><span style=display:flex><span>				<span style=color:#66d9ef>goto</span> end;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>			<span style=color:#66d9ef>if</span> (wo<span style=color:#f92672>-&gt;</span>wo_flags <span style=color:#f92672>&amp;</span> __WNOTHREAD)
+</span></span><span style=display:flex><span>				<span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>		} <span style=color:#a6e22e>while_each_thread</span>(current, tsk);
+</span></span><span style=display:flex><span>	}
+</span></span><span style=display:flex><span>	<span style=color:#a6e22e>read_unlock</span>(<span style=color:#f92672>&amp;</span>tasklist_lock);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>notask:
+</span></span><span style=display:flex><span>	retval <span style=color:#f92672>=</span> wo<span style=color:#f92672>-&gt;</span>notask_error;
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>retval <span style=color:#f92672>&amp;&amp;</span> <span style=color:#f92672>!</span>(wo<span style=color:#f92672>-&gt;</span>wo_flags <span style=color:#f92672>&amp;</span> WNOHANG)) {
+</span></span><span style=display:flex><span>		retval <span style=color:#f92672>=</span> <span style=color:#f92672>-</span>ERESTARTSYS;
+</span></span><span style=display:flex><span>		<span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span><span style=color:#a6e22e>signal_pending</span>(current)) {
+</span></span><span style=display:flex><span>			<span style=color:#a6e22e>schedule</span>();
+</span></span><span style=display:flex><span>			<span style=color:#66d9ef>goto</span> repeat;
+</span></span><span style=display:flex><span>		}
+</span></span><span style=display:flex><span>	}
+</span></span><span style=display:flex><span>end:
+</span></span><span style=display:flex><span>	<span style=color:#a6e22e>__set_current_state</span>(TASK_RUNNING);
+</span></span><span style=display:flex><span>	<span style=color:#a6e22e>remove_wait_queue</span>(<span style=color:#f92672>&amp;</span>current<span style=color:#f92672>-&gt;</span>signal<span style=color:#f92672>-&gt;</span>wait_chldexit, <span style=color:#f92672>&amp;</span>wo<span style=color:#f92672>-&gt;</span>child_wait);
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>return</span> retval;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>do_wait_pid()函数实现</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e> * Optimization for waiting on PIDTYPE_PID. No need to iterate through child
+</span></span></span><span style=display:flex><span><span style=color:#75715e> * and tracee lists to find the target task.
+</span></span></span><span style=display:flex><span><span style=color:#75715e> */</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>do_wait_pid</span>(<span style=color:#66d9ef>struct</span> wait_opts <span style=color:#f92672>*</span>wo)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>bool</span> ptrace;
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>struct</span> task_struct <span style=color:#f92672>*</span>target;
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>int</span> retval;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	ptrace <span style=color:#f92672>=</span> false;
+</span></span><span style=display:flex><span>	target <span style=color:#f92672>=</span> <span style=color:#a6e22e>pid_task</span>(wo<span style=color:#f92672>-&gt;</span>wo_pid, PIDTYPE_TGID);
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>if</span> (target <span style=color:#f92672>&amp;&amp;</span> <span style=color:#a6e22e>is_effectively_child</span>(wo, ptrace, target)) {
+</span></span><span style=display:flex><span>		retval <span style=color:#f92672>=</span> <span style=color:#a6e22e>wait_consider_task</span>(wo, ptrace, target);
+</span></span><span style=display:flex><span>		<span style=color:#66d9ef>if</span> (retval)
+</span></span><span style=display:flex><span>			<span style=color:#66d9ef>return</span> retval;
+</span></span><span style=display:flex><span>	}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	ptrace <span style=color:#f92672>=</span> true;
+</span></span><span style=display:flex><span>	target <span style=color:#f92672>=</span> <span style=color:#a6e22e>pid_task</span>(wo<span style=color:#f92672>-&gt;</span>wo_pid, PIDTYPE_PID); <span style=color:#75715e>// 找到子进程的task_struct
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>	<span style=color:#66d9ef>if</span> (target <span style=color:#f92672>&amp;&amp;</span> target<span style=color:#f92672>-&gt;</span>ptrace <span style=color:#f92672>&amp;&amp;</span>
+</span></span><span style=display:flex><span>	    <span style=color:#a6e22e>is_effectively_child</span>(wo, ptrace, target)) {
+</span></span><span style=display:flex><span>		retval <span style=color:#f92672>=</span> <span style=color:#a6e22e>wait_consider_task</span>(wo, ptrace, target); <span style=color:#75715e>// 调用至此
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>		<span style=color:#66d9ef>if</span> (retval)
+</span></span><span style=display:flex><span>			<span style=color:#66d9ef>return</span> retval;
+</span></span><span style=display:flex><span>	}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>wait_consider_task()函数实现比较长，我们只取关键部分</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>wait_consider_task</span>(<span style=color:#66d9ef>struct</span> wait_opts <span style=color:#f92672>*</span>wo, <span style=color:#66d9ef>int</span> ptrace,
+</span></span><span style=display:flex><span>				<span style=color:#66d9ef>struct</span> task_struct <span style=color:#f92672>*</span>p)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>	<span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>	 * We can race with wait_task_zombie() from another thread.
+</span></span></span><span style=display:flex><span><span style=color:#75715e>	 * Ensure that EXIT_ZOMBIE -&gt; EXIT_DEAD/EXIT_TRACE transition
+</span></span></span><span style=display:flex><span><span style=color:#75715e>	 * can&#39;t confuse the checks below.
+</span></span></span><span style=display:flex><span><span style=color:#75715e>	 */</span>
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>int</span> exit_state <span style=color:#f92672>=</span> <span style=color:#a6e22e>READ_ONCE</span>(p<span style=color:#f92672>-&gt;</span>exit_state); <span style=color:#75715e>// 先获取子进程的退出状态
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>	<span style=color:#66d9ef>int</span> ret;
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>	<span style=color:#75715e>/* slay zombie? */</span>
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>if</span> (exit_state <span style=color:#f92672>==</span> EXIT_ZOMBIE) { <span style=color:#75715e>// 匹配到子进程成为僵尸进程，走入这个分支
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>		<span style=color:#75715e>/* we don&#39;t reap group leaders with subthreads */</span>
+</span></span><span style=display:flex><span>		<span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span><span style=color:#a6e22e>delay_group_leader</span>(p)) {
+</span></span><span style=display:flex><span>			<span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>			 * A zombie ptracee is only visible to its ptracer.
+</span></span></span><span style=display:flex><span><span style=color:#75715e>			 * Notification and reaping will be cascaded to the
+</span></span></span><span style=display:flex><span><span style=color:#75715e>			 * real parent when the ptracer detaches.
+</span></span></span><span style=display:flex><span><span style=color:#75715e>			 */</span>
+</span></span><span style=display:flex><span>			<span style=color:#66d9ef>if</span> (<span style=color:#a6e22e>unlikely</span>(ptrace) <span style=color:#f92672>||</span> <span style=color:#a6e22e>likely</span>(<span style=color:#f92672>!</span>p<span style=color:#f92672>-&gt;</span>ptrace))
+</span></span><span style=display:flex><span>				<span style=color:#66d9ef>return</span> <span style=color:#a6e22e>wait_task_zombie</span>(wo, p); <span style=color:#75715e>// 最终调用至此
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>		}
+</span></span><span style=display:flex><span>    ...
+</span></span></code></pre></div><p>wait_task_zombie()函数实现，只取了关心的部分</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>wait_task_zombie</span>(<span style=color:#66d9ef>struct</span> wait_opts <span style=color:#f92672>*</span>wo, <span style=color:#66d9ef>struct</span> task_struct <span style=color:#f92672>*</span>p)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>int</span> state, status;
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>    state <span style=color:#f92672>=</span> (<span style=color:#a6e22e>ptrace_reparented</span>(p) <span style=color:#f92672>&amp;&amp;</span> <span style=color:#a6e22e>thread_group_leader</span>(p)) <span style=color:#f92672>?</span>
+</span></span><span style=display:flex><span>		EXIT_TRACE : EXIT_DEAD;
+</span></span><span style=display:flex><span>    ...
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>if</span> (state <span style=color:#f92672>==</span> EXIT_DEAD)
+</span></span><span style=display:flex><span>		<span style=color:#a6e22e>release_task</span>(p); <span style=color:#75715e>// 最终在这里释放了该子进程的剩余资源
+</span></span></span></code></pre></div><p>在成功匹配子进程的状态之后，就使用release_task函数对子进程进行了回收，这也是为什么使用waitpid之后，就没有找到前一个示例中所发现的defunct的僵尸进程了。具体的内核如何通过release_task()函数释放进程占用的剩余资源，这里就不继续跟踪了。</p><h2 id=引用>引用</h2><p><a href=https://zh.wikipedia.org/wiki/%E5%83%B5%E5%B0%B8%E8%BF%9B%E7%A8%8B>wikipedia-僵尸进程</a>
+<a href=https://elixir.bootlin.com/linux/v5.10.168/source/kernel/exit.c>kernel源码</a></p><ul class=pa0><li class="list di"><a href=/tags/syscall/ class="link f5 grow no-underline br-pill ba ph3 pv2 mb2 dib black sans-serif">syscall</a></li></ul><div class="mt6 instapaper_ignoref"></div></div><aside class="w-30-l mt6-l"></aside></article></main><footer class="bg-black bottom-0 w-100 pa3" role=contentinfo><div class="flex justify-between"><a class="f4 fw4 hover-white no-underline white-70 dn dib-ns pv2 ph3" href=https://hawkhe.github.io/>&copy; Hawk's Blog 2023</a><div><div class=ananke-socials></div></div></div></footer></body></html>
