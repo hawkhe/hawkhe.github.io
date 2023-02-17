@@ -2,6 +2,7 @@
 title: "使用waitpid清理僵尸进程"
 date: 2023-02-17T02:40:10Z
 draft: false
+# toc: true
 tags: ["syscall"]
 ---
 
