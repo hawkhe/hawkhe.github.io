@@ -137,7 +137,7 @@ kernel/exit.c:1773:SYSCALL_DEFINE4(wait4, pid_t, upid, int __user *, stat_addr,
 kernel/exit.c:1800:COMPAT_SYSCALL_DEFINE4(wait4,
 ```
 
-定义在kernel/exit.c的1773行，主要调用了kernel_wait4()函数
+内核的系统调用都用宏SYSCALL_DEFINEx来定义，其末尾的x表示该系统调用的参数个数，我们这里是4，表示有4个参数，具体实现细节我们暂时不展开了，感兴趣的小伙伴可以查阅更多的资料。我们这里主要关注其定义在kernel/exit.c的1773行，内部又调用了kernel_wait4()函数
 
 ```c
 SYSCALL_DEFINE4(wait4, pid_t, upid, int __user *, stat_addr,
